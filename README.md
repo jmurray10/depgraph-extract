@@ -54,6 +54,43 @@ That's it — PyYAML is the only dependency (used by the Compose / k8s / Terrafo
 CloudFormation parsers). The AST- and JSON-based parsers need nothing beyond the standard
 library.
 
+## Run it
+
+No files of your own? Paste this — it needs nothing but `pip install archgraph`:
+
+```python
+import archgraph, tempfile, os
+
+# A tiny LangGraph agent. archgraph parses it by AST — it never runs the file
+# and doesn't need langgraph installed.
+code = '''
+from langgraph.graph import StateGraph
+g = StateGraph(dict)
+g.set_entry_point("planner")
+g.add_edge("planner", "researcher")
+g.add_edge("researcher", "writer")
+g.set_finish_point("writer")
+'''
+path = os.path.join(tempfile.mkdtemp(), "agent.py")
+open(path, "w").write(code)
+
+for src, dst in archgraph.extract.from_langgraph(path):
+    print(f"{src} -> {dst}")
+# START -> planner
+# planner -> researcher
+# researcher -> writer
+# writer -> END
+```
+
+Or clone the repo and run the fuller [`examples/quickstart.py`](examples/quickstart.py) —
+it parses an agent and a Compose file, auto-detects the whole directory, then blends and
+dedupes:
+
+```bash
+git clone https://github.com/jmurray10/jmurray10-archgraph
+cd jmurray10-archgraph && pip install -e . && python examples/quickstart.py
+```
+
 ## What it parses
 
 | Category | Sources |
