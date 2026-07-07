@@ -23,4 +23,5 @@ interface across 15 sources.
   `dedupe_edges` (canonicalize + merge across sources), `find_edges`
   (deterministic scan with an **opt-in** LLM fallback — off by default, no
   data leaves your machine unless you pass `llm_fallback=True`).
-- 63 tests, CI on Python 3.9 / 3.11 / 3.13.
+- 70 tests covering all 15 parsers plus the `find_edges` egress guard and the
+  top-level API. CI on Python 3.9 / 3.11 / 3.13.
