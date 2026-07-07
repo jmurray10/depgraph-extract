@@ -1,5 +1,11 @@
 # archgraph
 
+[![CI](https://github.com/jmurray10/jmurray10-archgraph/actions/workflows/ci.yml/badge.svg)](https://github.com/jmurray10/jmurray10-archgraph/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](pyproject.toml)
+[![Local · no signup](https://img.shields.io/badge/local-no%20signup%2C%20no%20egress-brightgreen.svg)](#install)
+[![Sources](https://img.shields.io/badge/sources-15-8a2be2.svg)](#what-it-parses)
+
 **Turn your infrastructure, code, and agent frameworks into a directed dependency graph.**
 
 One consistent interface across **15 sources**. Every parser returns the same thing — a
@@ -79,6 +85,18 @@ node's structural role and flags single points of failure, amplification cascade
 convergence sinks from topology alone — but `archgraph` stands on its own: the graph is
 yours to do anything with.
 
+## Contributing
+
+New parsers are the most welcome contribution — see
+[CONTRIBUTING.md](CONTRIBUTING.md) for the one-rule parser contract, dev setup,
+and the PR checklist. Changes are logged in [CHANGELOG.md](CHANGELOG.md).
+
+```bash
+git clone https://github.com/jmurray10/jmurray10-archgraph
+cd jmurray10-archgraph && pip install -e '.[dev]' && pytest
+```
+
 ## License
 
-MIT.
+MIT — see [LICENSE](LICENSE). No patent claims, no signup, no server. The graph
+is yours.

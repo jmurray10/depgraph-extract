@@ -1,0 +1,18 @@
+# A small microservice topology. `from_docker_compose` reads `depends_on`
+# (both the list and long-form map syntax) into directed edges.
+services:
+  gateway:
+    image: nginx
+    depends_on: [web]
+  web:
+    build: ./web
+    depends_on:
+      api:
+        condition: service_started
+  api:
+    build: ./api
+    depends_on: [db, cache]
+  db:
+    image: postgres:16
+  cache:
+    image: redis:7

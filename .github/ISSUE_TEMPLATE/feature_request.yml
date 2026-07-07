@@ -1,0 +1,30 @@
+name: New parser / format request
+description: Ask for support for an infra format, agent framework, CI system, or IaC tool.
+labels: ["enhancement", "parser"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        archgraph grows by adding formats. If a source exposes a directed
+        relationship between named things, it's probably a good fit.
+  - type: input
+    id: format
+    attributes:
+      label: What format or tool?
+      placeholder: "Helm charts / Airflow DAGs / Nomad job files / …"
+    validations:
+      required: true
+  - type: textarea
+    id: sample
+    attributes:
+      label: A small real-world sample
+      description: Paste (or link) a representative file. This doubles as a test fixture.
+    validations:
+      required: true
+  - type: textarea
+    id: edges
+    attributes:
+      label: What edges should it produce?
+      description: For the sample above, what `(source, target)` pairs do you expect?
+    validations:
+      required: false

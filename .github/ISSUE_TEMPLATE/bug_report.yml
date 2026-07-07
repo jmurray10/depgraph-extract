@@ -1,0 +1,61 @@
+name: Bug report
+description: A parser produced wrong or missing edges, or crashed on a real file.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. A minimal input file that reproduces the problem is
+        the single most useful thing you can include.
+  - type: input
+    id: version
+    attributes:
+      label: archgraph version
+      description: Output of `python -c "import archgraph; print(archgraph.__version__)"`
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.12"
+    validations:
+      required: true
+  - type: dropdown
+    id: parser
+    attributes:
+      label: Which parser?
+      options:
+        - from_directory (auto-detect)
+        - from_docker_compose
+        - from_kubernetes
+        - from_terraform
+        - from_cloudformation
+        - from_aws_cdk
+        - from_pulumi
+        - from_github_actions
+        - from_package_json
+        - from_python_imports
+        - from_otel_traces
+        - from_langgraph
+        - from_crewai
+        - from_autogen
+        - find_edges / dedupe_edges
+    validations:
+      required: true
+  - type: textarea
+    id: input
+    attributes:
+      label: Minimal input file
+      description: The smallest file that reproduces it (paste contents or attach).
+      render: yaml
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs. actual edges
+      description: What edge list did you expect, and what did you get?
+    validations:
+      required: true
