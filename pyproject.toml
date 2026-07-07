@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "archgraph"
+version = "0.1.0"
+description = "Turn your infrastructure, code, and agent frameworks into a directed dependency graph — one edge-list API across 15 sources."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "jmurray10" }]
+keywords = [
+    "dependency-graph", "architecture", "docker-compose", "kubernetes",
+    "terraform", "cloudformation", "pulumi", "opentelemetry",
+    "langgraph", "crewai", "autogen", "graph", "edges",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: System :: Systems Administration",
+]
+dependencies = [
+    "pyyaml>=5.1",  # used by the Docker Compose / k8s / Terraform / CloudFormation parsers
+]
+
+[project.optional-dependencies]
+# Opt-in LLM fallback for repos with no recognized infra files (egresses file contents).
+llm = ["anthropic>=0.30", "google-genai>=0.3"]
+dev = ["pytest>=7"]
+
+[project.urls]
+Homepage = "https://github.com/jmurray10/jmurray10-archgraph"
+"Source" = "https://github.com/jmurray10/jmurray10-archgraph"
+# Downstream: the extracted edge list plugs straight into SemanticEmbed's 6D structural analysis.
+"SemanticEmbed SDK" = "https://github.com/jmurray10/semanticembed-sdk"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/archgraph"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

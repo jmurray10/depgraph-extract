@@ -1,0 +1,35 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Minimal CFN fixture with explicit DependsOn + Ref + Fn::GetAtt + Fn::Sub
+
+Resources:
+  MyVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+
+  MySubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVpc
+      CidrBlock: 10.0.1.0/24
+
+  MyBucket:
+    Type: AWS::S3::Bucket
+
+  MyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument: {}
+
+  MyFunction:
+    Type: AWS::Lambda::Function
+    DependsOn:
+      - MyBucket
+    Properties:
+      Role: !GetAtt MyRole.Arn
+      VpcConfig:
+        SubnetIds:
+          - !Ref MySubnet
+      Environment:
+        Variables:
+          BUCKET_NAME: !Sub "${MyBucket}-prod"

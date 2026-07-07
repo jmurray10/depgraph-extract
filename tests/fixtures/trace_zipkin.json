@@ -1,0 +1,6 @@
+[
+  {"traceId": "t1", "id": "s1", "name": "GET /", "localEndpoint": {"serviceName": "frontend"}},
+  {"traceId": "t1", "id": "s2", "parentId": "s1", "localEndpoint": {"serviceName": "frontend"}, "name": "GET /api/auth"},
+  {"traceId": "t1", "id": "s3", "parentId": "s2", "localEndpoint": {"serviceName": "auth"}, "name": "verify"},
+  {"traceId": "t1", "id": "s4", "parentId": "s3", "localEndpoint": {"serviceName": "db"}, "name": "SELECT"}
+]

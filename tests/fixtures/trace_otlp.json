@@ -1,0 +1,48 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {"key": "service.name", "value": {"stringValue": "frontend"}}
+        ]
+      },
+      "scopeSpans": [
+        {
+          "spans": [
+            {"spanId": "aaaa01", "parentSpanId": "", "name": "GET /"},
+            {"spanId": "aaaa02", "parentSpanId": "aaaa01", "name": "GET /api/auth"}
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [
+          {"key": "service.name", "value": {"stringValue": "auth"}}
+        ]
+      },
+      "scopeSpans": [
+        {
+          "spans": [
+            {"spanId": "bbbb01", "parentSpanId": "aaaa02", "name": "verify_token"},
+            {"spanId": "bbbb02", "parentSpanId": "bbbb01", "name": "db_query"}
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [
+          {"key": "service.name", "value": {"stringValue": "db"}}
+        ]
+      },
+      "scopeSpans": [
+        {
+          "spans": [
+            {"spanId": "cccc01", "parentSpanId": "bbbb02", "name": "SELECT users"}
+          ]
+        }
+      ]
+    }
+  ]
+}

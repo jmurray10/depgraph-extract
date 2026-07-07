@@ -1,0 +1,18 @@
+{
+  "data": [
+    {
+      "traceID": "trace1",
+      "spans": [
+        {"spanID": "s1", "processID": "p1", "references": []},
+        {"spanID": "s2", "processID": "p1", "references": [{"refType": "CHILD_OF", "spanID": "s1"}]},
+        {"spanID": "s3", "processID": "p2", "references": [{"refType": "CHILD_OF", "spanID": "s2"}]},
+        {"spanID": "s4", "processID": "p3", "references": [{"refType": "CHILD_OF", "spanID": "s3"}]}
+      ],
+      "processes": {
+        "p1": {"serviceName": "frontend"},
+        "p2": {"serviceName": "auth"},
+        "p3": {"serviceName": "db"}
+      }
+    }
+  ]
+}
