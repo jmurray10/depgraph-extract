@@ -4,7 +4,7 @@
 
 Please **do not** open a public GitHub issue for security problems. Use
 GitHub's [private vulnerability reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability)
-on this repository, or email **jeffmurrayupenn@gmail.com** with:
+on this repository, or email **jeff.murray@alumni.upenn.edu** with:
 
 - A description of the issue and steps to reproduce (minimum working example)
 - The archgraph version and Python version

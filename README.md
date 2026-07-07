@@ -147,6 +147,14 @@ git clone https://github.com/jmurray10/jmurray10-archgraph
 cd jmurray10-archgraph && pip install -e '.[dev]' && pytest
 ```
 
+## Contact
+
+Built by **Jeff Murray** ([@jmurray10](https://github.com/jmurray10)).
+
+- Email: **jeff.murray@alumni.upenn.edu**
+- LinkedIn: [linkedin.com/in/jeff-murray-ai](https://www.linkedin.com/in/jeff-murray-ai)
+- GitHub: [@jmurray10](https://github.com/jmurray10)
+
 ## License
 
 MIT — see [LICENSE](LICENSE). No patent claims, no signup, no server. The graph

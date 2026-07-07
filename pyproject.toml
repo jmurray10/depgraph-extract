@@ -9,7 +9,7 @@ description = "Turn your infrastructure, code, and agent frameworks into a direc
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
-authors = [{ name = "jmurray10" }]
+authors = [{ name = "Jeff Murray", email = "jeff.murray@alumni.upenn.edu" }]
 keywords = [
     "dependency-graph", "architecture", "docker-compose", "kubernetes",
     "terraform", "cloudformation", "pulumi", "opentelemetry",
