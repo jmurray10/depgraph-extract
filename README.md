@@ -30,6 +30,20 @@ edges = archgraph.extract.from_otel_traces("trace.json")
 No graph runtime. No service to sign up for. On the deterministic path, **nothing leaves
 your machine.**
 
+## Why archgraph?
+
+You already describe your system somewhere — Compose files, Terraform, agent code,
+OpenTelemetry traces. archgraph turns any of it into the *same* edge list, so you can:
+
+- **See what depends on what** — pipe the graph into graphviz or networkx; no separate
+  diagram tool, no diagram to keep in sync by hand.
+- **Read an agent's real control flow** — get the graph straight from LangGraph / CrewAI /
+  AutoGen source, statically, without running it or installing the framework.
+- **Gate drift in CI** — diff the edge list between commits and fail the build when a new
+  dependency, cycle, or single point of failure sneaks in.
+- **Feed structural analysis** — one normalized graph across every source, ready for
+  centrality, cycle detection, or any graph algorithm you like.
+
 ## Install
 
 ```bash
