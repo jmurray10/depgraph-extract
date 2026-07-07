@@ -70,6 +70,25 @@ class TestTerraform:
         edges = {tuple(e) for e in extract.from_terraform(str(tmp_path))}
         assert ("web", "main") in edges
 
+    def test_count_for_each_indexed_refs(self, tmp_path):
+        # Real modules reference resources with count/for_each indexing, e.g.
+        # `aws_subnet.public[0].id`. Regression for the terraform-aws-vpc miss.
+        _write(tmp_path / "vpc.tf", """\
+            resource "aws_nat_gateway" "gw" {
+              subnet_id     = aws_subnet.public[0].id
+              allocation_id = aws_eip.nat[count.index].id
+            }
+            resource "aws_subnet" "public" {
+              count = 2
+            }
+            resource "aws_eip" "nat" {
+              count = 2
+            }
+        """)
+        edges = {tuple(e) for e in extract.from_terraform(str(tmp_path))}
+        assert ("gw", "public") in edges     # aws_subnet.public[0].id
+        assert ("gw", "nat") in edges        # aws_eip.nat[count.index].id
+
 
 class TestGitHubActions:
     def test_needs_builds_job_graph(self, tmp_path):
@@ -121,6 +140,36 @@ class TestFindEdgesEgressGuard:
         # New guard: names the flag, and never mentions an LLM provider.
         assert any("llm_fallback=False" in entry for entry in log)
         assert not any("claude" in entry or "gemini" in entry for entry in log)
+
+
+class TestFromDirectoryK8sDiscovery:
+    def test_finds_manifests_in_nonstandard_dir(self, tmp_path):
+        # Manifests under release/ — not a conventional k8s dir name. Regression
+        # for the GoogleCloudPlatform/microservices-demo auto-detect miss.
+        rel = tmp_path / "release"
+        rel.mkdir()
+        _write(rel / "kubernetes-manifests.yaml", """\
+            apiVersion: v1
+            kind: Service
+            metadata:
+              name: web
+            spec:
+              selector:
+                app: web
+            ---
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: web-deploy
+            spec:
+              template:
+                metadata:
+                  labels:
+                    app: web
+        """)
+        edges, sources = archgraph.from_directory(str(tmp_path))
+        assert "kubernetes" in sources
+        assert ("web", "web-deploy") in {tuple(e) for e in edges}
 
 
 class TestTopLevelApi:

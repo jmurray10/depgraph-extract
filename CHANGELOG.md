@@ -23,5 +23,14 @@ interface across 15 sources.
   `dedupe_edges` (canonicalize + merge across sources), `find_edges`
   (deterministic scan with an **opt-in** LLM fallback — off by default, no
   data leaves your machine unless you pass `llm_fallback=True`).
-- 70 tests covering all 15 parsers plus the `find_edges` egress guard and the
-  top-level API. CI on Python 3.9 / 3.11 / 3.13.
+- **Validated against real public repos** — GoogleCloudPlatform/microservices-demo
+  (Kubernetes), docker/awesome-compose (Compose), terraform-aws-modules/terraform-aws-vpc
+  (Terraform). Two fixes came out of it:
+  - `from_terraform` now resolves `count` / `for_each`-indexed references
+    (`aws_subnet.this[0].id`, `aws_eip.nat[count.index].id`), the form real
+    modules use — 2 → 56 edges on terraform-aws-vpc.
+  - `from_directory` finds Kubernetes manifests by content (`apiVersion` + `kind`)
+    in any directory, not just conventional names like `k8s/` — so manifests under
+    `release/` or `kubernetes-manifests/` are detected.
+- 72 tests covering all 15 parsers plus the `find_edges` egress guard, the
+  top-level API, and the two real-repo regressions above. CI on Python 3.9 / 3.11 / 3.13.

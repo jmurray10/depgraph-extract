@@ -299,7 +299,9 @@ def from_terraform(path: str = ".") -> list[tuple[str, str]]:
     resource_pattern = re.compile(
         r'resource\s+"([^"]+)"\s+"([^"]+)"\s*\{', re.MULTILINE
     )
-    ref_pattern = re.compile(r"(\w+\.\w+)\.")
+    # Match `type.name` optionally followed by a `[index]` (count / for_each),
+    # e.g. `aws_subnet.this[0].id` or `aws_eip.nat[count.index].id`.
+    ref_pattern = re.compile(r"(\w+\.\w+)(?:\[[^\]]*\])?\.")
 
     resources: dict[str, str] = {}  # "type.name" -> short label
     file_contents: dict[str, str] = {}
@@ -1337,18 +1339,30 @@ def from_directory(path: str = ".") -> tuple[list[tuple[str, str]], dict[str, in
             except Exception:
                 pass
 
-    # Kubernetes
-    k8s_dirs = ["k8s", "kubernetes", "manifests", "deploy", "deployments"]
-    for d in k8s_dirs:
-        k8s_path = os.path.join(path, d)
-        if os.path.isdir(k8s_path):
+    # Kubernetes — find any directory containing YAML that declares a k8s
+    # resource (`apiVersion` + `kind`), rather than trusting conventional dir
+    # names. This catches manifests in non-standard locations (e.g. release/,
+    # kubernetes-manifests/). Running once per directory keeps cross-file
+    # Service->Deployment selector matching intact.
+    k8s_dirs_found: set[str] = set()
+    for ext in ("**/*.yaml", "**/*.yml"):
+        for fp in glob.glob(os.path.join(path, ext), recursive=True):
+            if any(p in fp for p in ("node_modules", ".venv", "venv", ".git")):
+                continue
             try:
-                edges = from_kubernetes(k8s_path)
-                if edges:
-                    all_edges.extend(edges)
-                    sources["kubernetes"] = sources.get("kubernetes", 0) + len(edges)
-            except Exception:
-                pass
+                head = open(fp, encoding="utf-8", errors="replace").read(2048)
+            except OSError:
+                continue
+            if "apiVersion:" in head and "kind:" in head:
+                k8s_dirs_found.add(os.path.dirname(fp) or path)
+    for d in sorted(k8s_dirs_found):
+        try:
+            edges = from_kubernetes(d)
+            if edges:
+                all_edges.extend(edges)
+                sources["kubernetes"] = sources.get("kubernetes", 0) + len(edges)
+        except Exception:
+            pass
 
     # GitHub Actions
     gh_path = os.path.join(path, ".github", "workflows")
