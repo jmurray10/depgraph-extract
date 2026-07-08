@@ -64,9 +64,7 @@ def from_docker_compose(path: str = "docker-compose.yml") -> list[tuple[str, str
 
     Example::
 
-        edges = se.extract.from_docker_compose("docker-compose.yml")
-        result = se.encode(edges)
-        print(result.table)
+        edges = archgraph.extract.from_docker_compose("docker-compose.yml")
     """
     data = _load_single_yaml(path)
     if not data or "services" not in data:
@@ -116,9 +114,7 @@ def from_kubernetes(path: str = ".") -> list[tuple[str, str]]:
 
     Example::
 
-        edges = se.extract.from_kubernetes("k8s/")
-        result = se.encode(edges)
-        print(result.table)
+        edges = archgraph.extract.from_kubernetes("k8s/")
     """
     if os.path.isdir(path):
         files = (
@@ -226,9 +222,7 @@ def from_github_actions(path: str = ".github/workflows") -> list[tuple[str, str]
 
     Example::
 
-        edges = se.extract.from_github_actions()
-        result = se.encode(edges)
-        print(result.table)
+        edges = archgraph.extract.from_github_actions()
     """
     if os.path.isdir(path):
         files = glob.glob(os.path.join(path, "*.yml")) + glob.glob(
@@ -286,9 +280,7 @@ def from_terraform(path: str = ".") -> list[tuple[str, str]]:
 
     Example::
 
-        edges = se.extract.from_terraform("infra/")
-        result = se.encode(edges)
-        print(result.table)
+        edges = archgraph.extract.from_terraform("infra/")
     """
     if os.path.isdir(path):
         files = glob.glob(os.path.join(path, "**/*.tf"), recursive=True)
@@ -373,12 +365,11 @@ def from_python_imports(path: str = ".", *, depth: int | None = None) -> list[tu
     Example::
 
         # Default: short names
-        edges = se.extract.from_python_imports("src/")
+        edges = archgraph.extract.from_python_imports("src/")
 
         # Service-boundary rollup for a monorepo with services/<svc>/...
-        edges = se.extract.from_python_imports(".", depth=2)
+        edges = archgraph.extract.from_python_imports(".", depth=2)
 
-        result = se.encode(edges)
     """
     if os.path.isfile(path):
         files = [path]
@@ -481,9 +472,7 @@ def from_package_json(path: str = "package.json") -> list[tuple[str, str]]:
 
     Example::
 
-        edges = se.extract.from_package_json("package.json")
-        result = se.encode(edges)
-        print(result.table)
+        edges = archgraph.extract.from_package_json("package.json")
     """
     import json as _json
 
@@ -517,9 +506,7 @@ def from_package_json_workspaces(path: str = ".") -> list[tuple[str, str]]:
 
     Example::
 
-        edges = se.extract.from_package_json_workspaces(".")
-        result = se.encode(edges)
-        print(result.table)
+        edges = archgraph.extract.from_package_json_workspaces(".")
     """
     import json as _json
 
@@ -580,8 +567,7 @@ def from_cloudformation(path: str) -> list[tuple[str, str]]:
 
     Example::
 
-        edges = se.extract.from_cloudformation("infra/")
-        result = se.encode(edges)
+        edges = archgraph.extract.from_cloudformation("infra/")
     """
     files: list[str] = []
     is_dir = os.path.isdir(path)
@@ -870,8 +856,7 @@ def from_otel_traces(path: str) -> list[tuple[str, str]]:
 
     Example::
 
-        edges = se.extract.from_otel_traces("traces.json")
-        result = se.encode(edges)
+        edges = archgraph.extract.from_otel_traces("traces.json")
     """
     import json
 
@@ -1319,10 +1304,8 @@ def from_directory(path: str = ".") -> tuple[list[tuple[str, str]], dict[str, in
 
     Example::
 
-        edges, sources = se.extract.from_directory(".")
+        edges, sources = archgraph.extract.from_directory(".")
         print(f"Found {len(edges)} edges from {sources}")
-        result = se.encode(edges)
-        print(result.table)
     """
     all_edges: list[tuple[str, str]] = []
     sources: dict[str, int] = {}

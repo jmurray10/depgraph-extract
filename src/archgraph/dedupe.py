@@ -72,14 +72,13 @@ def dedupe_edges(
     Examples::
 
         # Combine extractor outputs and canonicalize.
-        from_compose, _ = se.extract.from_directory(".")
-        from_traces = se.extract.from_otel_traces("traces.json")
-        all_edges = se.dedupe_edges(
+        from_compose, _ = archgraph.extract.from_directory(".")
+        from_traces = archgraph.extract.from_otel_traces("traces.json")
+        all_edges = archgraph.dedupe_edges(
             list(from_compose) + from_traces,
             normalize="snake",
             aliases={"auth_svc": "auth_service"},
         )
-        result = se.encode(all_edges)
     """
     if normalize not in _NORMALIZERS:
         raise ValueError(
