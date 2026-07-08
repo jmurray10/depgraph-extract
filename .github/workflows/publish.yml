@@ -3,9 +3,9 @@ name: Publish to PyPI
 # Triggers on a tag push of the form `v*` — e.g. `git tag v0.1.0 && git push origin v0.1.0`.
 # Uses PyPI Trusted Publishing (OIDC) so no API token is stored as a GitHub secret.
 # One-time setup: pypi.org -> Account -> Publishing -> Add pending publisher
-#   PyPI Project Name: archgraph
+#   PyPI Project Name: depgraph-extract
 #   Owner:             jmurray10
-#   Repository:        jmurray10-archgraph
+#   Repository:        depgraph-extract
 #   Workflow name:     publish.yml
 #   Environment:       pypi   (matches the `environment:` line below)
 

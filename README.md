@@ -1,6 +1,6 @@
-# archgraph
+# depgraph-extract
 
-[![CI](https://github.com/jmurray10/jmurray10-archgraph/actions/workflows/ci.yml/badge.svg)](https://github.com/jmurray10/jmurray10-archgraph/actions/workflows/ci.yml)
+[![CI](https://github.com/jmurray10/depgraph-extract/actions/workflows/ci.yml/badge.svg)](https://github.com/jmurray10/depgraph-extract/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](pyproject.toml)
 [![Local · no signup](https://img.shields.io/badge/local-no%20signup%2C%20no%20egress-brightgreen.svg)](#install)
@@ -14,26 +14,26 @@ Terraform directory, an OpenTelemetry trace, or a **LangGraph / CrewAI / AutoGen
 get a graph you can drop straight into graphviz, networkx, or your own analysis.
 
 ```python
-import archgraph
+import depgraph_extract
 
 # Auto-detect everything in a directory
-edges, sources = archgraph.from_directory(".")
+edges, sources = depgraph_extract.from_directory(".")
 # edges  -> [("web", "api"), ("api", "db"), ...]
 # sources -> {"docker-compose": 4, "terraform": 7, "langgraph": 3}
 
 # Or target one source
-edges = archgraph.extract.from_docker_compose("docker-compose.yml")
-edges = archgraph.extract.from_langgraph("agent.py")
-edges = archgraph.extract.from_otel_traces("trace.json")
+edges = depgraph_extract.extract.from_docker_compose("docker-compose.yml")
+edges = depgraph_extract.extract.from_langgraph("agent.py")
+edges = depgraph_extract.extract.from_otel_traces("trace.json")
 ```
 
 No graph runtime. No service to sign up for. On the deterministic path, **nothing leaves
 your machine.**
 
-## Why archgraph?
+## Why depgraph-extract?
 
 You already describe your system somewhere — Compose files, Terraform, agent code,
-OpenTelemetry traces. archgraph turns any of it into the *same* edge list, so you can:
+OpenTelemetry traces. depgraph-extract turns any of it into the *same* edge list, so you can:
 
 - **See what depends on what** — pipe the graph into graphviz or networkx; no separate
   diagram tool, no diagram to keep in sync by hand.
@@ -47,7 +47,7 @@ OpenTelemetry traces. archgraph turns any of it into the *same* edge list, so yo
 ## Install
 
 ```bash
-pip install archgraph
+pip install depgraph-extract
 ```
 
 That's it — PyYAML is the only dependency (used by the Compose / k8s / Terraform /
@@ -56,12 +56,12 @@ library.
 
 ## Run it
 
-No files of your own? Paste this — it needs nothing but `pip install archgraph`:
+No files of your own? Paste this — it needs nothing but `pip install depgraph-extract`:
 
 ```python
-import archgraph, tempfile, os
+import depgraph_extract, tempfile, os
 
-# A tiny LangGraph agent. archgraph parses it by AST — it never runs the file
+# A tiny LangGraph agent. depgraph-extract parses it by AST — it never runs the file
 # and doesn't need langgraph installed.
 code = '''
 from langgraph.graph import StateGraph
@@ -74,7 +74,7 @@ g.set_finish_point("writer")
 path = os.path.join(tempfile.mkdtemp(), "agent.py")
 open(path, "w").write(code)
 
-for src, dst in archgraph.extract.from_langgraph(path):
+for src, dst in depgraph_extract.extract.from_langgraph(path):
     print(f"{src} -> {dst}")
 # START -> planner
 # planner -> researcher
@@ -87,8 +87,8 @@ it parses an agent and a Compose file, auto-detects the whole directory, then bl
 dedupes:
 
 ```bash
-git clone https://github.com/jmurray10/jmurray10-archgraph
-cd jmurray10-archgraph && pip install -e . && python examples/quickstart.py
+git clone https://github.com/jmurray10/depgraph-extract
+cd depgraph-extract && pip install -e . && python examples/quickstart.py
 ```
 
 ## What it parses
@@ -112,15 +112,15 @@ Combining extractors often yields the same logical node under several spellings
 (`auth-svc`, `auth_svc`, `AuthService`). `dedupe_edges` canonicalizes and merges:
 
 ```python
-compose = archgraph.extract.from_docker_compose("docker-compose.yml")
-traces  = archgraph.extract.from_otel_traces("trace.json")
-edges   = archgraph.dedupe_edges(compose + traces, normalize="snake")
+compose = depgraph_extract.extract.from_docker_compose("docker-compose.yml")
+traces  = depgraph_extract.extract.from_otel_traces("trace.json")
+edges   = depgraph_extract.dedupe_edges(compose + traces, normalize="snake")
 ```
 
 ## One-call discovery
 
 ```python
-edges, sources, log = archgraph.find_edges(".")
+edges, sources, log = depgraph_extract.find_edges(".")
 ```
 
 `find_edges` runs the deterministic scan and returns the edges plus a human-readable log of
@@ -133,7 +133,7 @@ Anthropic or Google, which is why it's off by default.
 An edge list is the universal input to structural graph analysis. These same parsers power
 the [SemanticEmbed SDK](https://github.com/jmurray10/semanticembed-sdk), which encodes each
 node's structural role and flags single points of failure, amplification cascades, and
-convergence sinks from topology alone — but `archgraph` stands on its own: the graph is
+convergence sinks from topology alone — but `depgraph-extract` stands on its own: the graph is
 yours to do anything with.
 
 ## Contributing
@@ -143,8 +143,8 @@ New parsers are the most welcome contribution — see
 and the PR checklist. Changes are logged in [CHANGELOG.md](CHANGELOG.md).
 
 ```bash
-git clone https://github.com/jmurray10/jmurray10-archgraph
-cd jmurray10-archgraph && pip install -e '.[dev]' && pytest
+git clone https://github.com/jmurray10/depgraph-extract
+cd depgraph-extract && pip install -e '.[dev]' && pytest
 ```
 
 ## Contact

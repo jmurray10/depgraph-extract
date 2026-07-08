@@ -7,14 +7,14 @@ GitHub's [private vulnerability reporting](https://docs.github.com/en/code-secur
 on this repository, or email **jeff.murray@alumni.upenn.edu** with:
 
 - A description of the issue and steps to reproduce (minimum working example)
-- The archgraph version and Python version
+- The depgraph-extract version and Python version
 - Your proposed fix or mitigation, if any
 
 You'll get an acknowledgement within 72 hours.
 
 ## Scope
 
-archgraph is a local, read-only file parser. It does not run a server, store
+depgraph-extract is a local, read-only file parser. It does not run a server, store
 credentials, or make network calls on its default path. The security surface
 is small but worth noting:
 

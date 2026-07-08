@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to **archgraph**. This project adheres to
+All notable changes to **depgraph-extract**. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
 ## 0.1.0 — First release

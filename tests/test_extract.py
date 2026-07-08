@@ -1,4 +1,4 @@
-"""Fixture-based tests for archgraph.extract.
+"""Fixture-based tests for depgraph_extract.extract.
 
 No network calls — these tests parse small fixtures committed to tests/fixtures/.
 """
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from archgraph import extract
+from depgraph_extract import extract
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -72,14 +72,14 @@ class TestPythonImportsDepth:
         return tmp_path
 
     def test_default_uses_short_names(self, tmp_path):
-        from archgraph import extract
+        from depgraph_extract import extract
         self._make_repo(tmp_path)
         edges = extract.from_python_imports(str(tmp_path))
         edges_set = {tuple(e) for e in edges}
         assert ("user", "gateway") in edges_set
 
     def test_depth_1_rolls_to_top_level(self, tmp_path):
-        from archgraph import extract
+        from depgraph_extract import extract
         # Single top-level package -> all internal edges are self-loops -> dropped.
         self._make_repo(tmp_path)
         edges = extract.from_python_imports(str(tmp_path), depth=1)
@@ -87,7 +87,7 @@ class TestPythonImportsDepth:
         assert edges == []
 
     def test_depth_2_groups_at_service_boundary(self, tmp_path):
-        from archgraph import extract
+        from depgraph_extract import extract
         self._make_repo(tmp_path)
         edges = extract.from_python_imports(str(tmp_path), depth=2)
         edges_set = {tuple(e) for e in edges}
@@ -96,7 +96,7 @@ class TestPythonImportsDepth:
 
 class TestFindEdges:
     def test_deterministic_path_skips_llm(self, tmp_path):
-        from archgraph import find_edges
+        from depgraph_extract import find_edges
         (tmp_path / "docker-compose.yml").write_text(textwrap.dedent("""\
             services:
               a:
@@ -113,7 +113,7 @@ class TestFindEdges:
         assert not any("claude" in entry or "gemini" in entry for entry in log)
 
     def test_max_nodes_truncates(self, tmp_path):
-        from archgraph import find_edges
+        from depgraph_extract import find_edges
         # docker-compose with 6 services in a chain
         (tmp_path / "docker-compose.yml").write_text(textwrap.dedent("""\
             services:

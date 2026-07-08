@@ -10,8 +10,8 @@ import textwrap
 
 import pytest
 
-import archgraph
-from archgraph import extract
+import depgraph_extract
+from depgraph_extract import extract
 
 
 def _write(path, text):
@@ -134,7 +134,7 @@ class TestPackageJson:
 
 class TestFindEdgesEgressGuard:
     def test_empty_dir_does_not_egress_by_default(self, tmp_path):
-        edges, sources, log = archgraph.find_edges(str(tmp_path))
+        edges, sources, log = depgraph_extract.find_edges(str(tmp_path))
         assert edges == []
         assert sources == {}
         # New guard: names the flag, and never mentions an LLM provider.
@@ -167,7 +167,7 @@ class TestFromDirectoryK8sDiscovery:
                   labels:
                     app: web
         """)
-        edges, sources = archgraph.from_directory(str(tmp_path))
+        edges, sources = depgraph_extract.from_directory(str(tmp_path))
         assert "kubernetes" in sources
         assert ("web", "web-deploy") in {tuple(e) for e in edges}
 
@@ -181,9 +181,9 @@ class TestTopLevelApi:
               b: {}
         """)
         # from_directory re-exported at top level
-        edges, sources = archgraph.from_directory(str(tmp_path))
+        edges, sources = depgraph_extract.from_directory(str(tmp_path))
         assert ("a", "b") in {tuple(e) for e in edges}
         assert "docker-compose" in sources
         # dedupe_edges re-exported at top level
-        merged = archgraph.dedupe_edges([("A", "B"), ("a", "b")], normalize="lower")
+        merged = depgraph_extract.dedupe_edges([("A", "B"), ("a", "b")], normalize="lower")
         assert merged == [("a", "b")]

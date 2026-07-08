@@ -1,14 +1,14 @@
-"""archgraph — turn your infrastructure, code, and agent frameworks into a directed dependency graph.
+"""depgraph_extract — turn your infrastructure, code, and agent frameworks into a directed dependency graph.
 
 One consistent interface across 15 sources — Docker Compose, Kubernetes, Terraform,
 CloudFormation, AWS CDK, Pulumi, GitHub Actions, package.json, pyproject/requirements,
 Python imports, OpenTelemetry traces (OTLP/Jaeger/Zipkin), and the LangGraph / CrewAI /
 AutoGen agent frameworks — every one returns a plain ``list[tuple[str, str]]`` edge list.
 
-    import archgraph
+    import depgraph_extract
 
-    edges, sources = archgraph.from_directory(".")   # auto-detect everything
-    edges = archgraph.extract.from_docker_compose("docker-compose.yml")
+    edges, sources = depgraph_extract.from_directory(".")   # auto-detect everything
+    edges = depgraph_extract.extract.from_docker_compose("docker-compose.yml")
 
 No graph runtime, no service to sign up for, nothing leaves your machine on the
 deterministic path. Feed the edge list to graphviz, networkx, or your own analysis.

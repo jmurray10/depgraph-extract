@@ -1,4 +1,4 @@
-"""Tests for archgraph.dedupe_edges.
+"""Tests for depgraph_extract.dedupe_edges.
 
 Covers the four normalization modes, alias overrides, self-loop dropping,
 and accepting all the edge formats the SDK supports (tuple/list/dict).
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from archgraph import dedupe_edges
+from depgraph_extract import dedupe_edges
 
 
 class TestExactDedupe:

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from archgraph import extract
+from depgraph_extract import extract
 
 
 FIXTURES = Path(__file__).parent / "fixtures"

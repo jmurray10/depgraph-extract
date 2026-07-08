@@ -1,6 +1,6 @@
 # Contributing
 
-archgraph is MIT-licensed and contributions are genuinely welcome — new
+depgraph-extract is MIT-licensed and contributions are genuinely welcome — new
 parsers especially. The whole value of this library is breadth: the more
 formats it reads, the more useful it is.
 
@@ -26,8 +26,8 @@ source. That uniform contract is what lets sources blend via `dedupe_edges`.
 ## Development setup
 
 ```bash
-git clone https://github.com/jmurray10/jmurray10-archgraph
-cd jmurray10-archgraph
+git clone https://github.com/jmurray10/depgraph-extract
+cd depgraph-extract
 pip install -e '.[dev]'
 pytest
 ```
@@ -52,7 +52,7 @@ Publishing uses PyPI Trusted Publishing (OIDC) — no token to manage. Pushing
 a `v*` tag triggers `.github/workflows/publish.yml`:
 
 ```bash
-# bump version in pyproject.toml AND src/archgraph/__init__.py
+# bump version in pyproject.toml AND src/depgraph_extract/__init__.py
 git commit -am "vX.Y.Z: description"
 git tag -a vX.Y.Z -m "vX.Y.Z — short summary"
 git push && git push origin vX.Y.Z

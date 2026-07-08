@@ -1,4 +1,4 @@
-"""Tests for archgraph.extract.from_otel_traces.
+"""Tests for depgraph_extract.extract.from_otel_traces.
 
 Covers all three trace formats (OTLP / Jaeger / Zipkin) with fixtures that
 encode the same logical topology: frontend -> auth -> db. Same-service spans
@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from archgraph import extract
+from depgraph_extract import extract
 
 
 FIXTURES = Path(__file__).parent / "fixtures"

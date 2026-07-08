@@ -1,4 +1,4 @@
-"""A small LangGraph-style pipeline. archgraph parses this by AST — it never
+"""A small LangGraph-style pipeline. depgraph_extract parses this by AST — it never
 imports langgraph or runs the file — so `from_langgraph` works without
 `pip install langgraph`.
 """

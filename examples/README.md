@@ -18,7 +18,7 @@ so you can pipe the output straight into `networkx`, `graphviz`, or your own
 analysis:
 
 ```python
-import archgraph, networkx as nx
-edges, _ = archgraph.from_directory(".")
+import depgraph_extract, networkx as nx
+edges, _ = depgraph_extract.from_directory(".")
 G = nx.DiGraph(edges)
 ```

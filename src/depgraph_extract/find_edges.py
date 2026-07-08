@@ -1,7 +1,7 @@
 """Programmatic edge discovery — scan a directory, get an edge list.
 
 ``find_edges()`` runs the deterministic infrastructure scan first
-(:func:`archgraph.extract.from_directory`). That path is pure and local: it
+(:func:`depgraph_extract.extract.from_directory`). That path is pure and local: it
 reads recognized files and returns edges, and **nothing leaves your machine**.
 
 An optional LLM fallback (``llm_fallback=True``) handles repos with no
@@ -50,7 +50,7 @@ def find_edges(
 
     Strategy:
 
-    1. Try :func:`archgraph.extract.from_directory`. If any edges are found,
+    1. Try :func:`depgraph_extract.extract.from_directory`. If any edges are found,
        return them (no LLM call, no data egress).
     2. Only if ``llm_fallback=True`` and the deterministic scan found nothing,
        read recognized text files under ``path`` (capped at ``_MAX_TOTAL_BYTES``)

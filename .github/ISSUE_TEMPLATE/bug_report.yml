@@ -10,8 +10,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: archgraph version
-      description: Output of `python -c "import archgraph; print(archgraph.__version__)"`
+      label: depgraph-extract version
+      description: Output of `python -c "import depgraph_extract; print(depgraph_extract.__version__)"`
       placeholder: "0.1.0"
     validations:
       required: true
