@@ -1,4 +1,6 @@
 {
-  "edges": [],
-  "note": "single Zipkin span object; parent span is not in the file. Parser accepts a JSON array, not one object."
+  "edges": [
+    ["frontend", "backend"]
+  ],
+  "note": "One CLIENT span. The parent span is not in the file. remoteEndpoint is the callee."
 }

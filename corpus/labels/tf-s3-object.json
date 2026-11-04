@@ -1,3 +1,15 @@
 {
-  "edges": []
+  "edges": [
+    ["object", "s3_bucket"],
+    ["object", "random_pet.this"],
+    ["object_complete", "s3_bucket"],
+    ["object_complete", "random_pet.this"],
+    ["object_complete", "aws_kms_key.this"],
+    ["object_locked", "s3_bucket_with_object_lock"],
+    ["object_locked", "random_pet.this"],
+    ["object_with_override_default_tags", "s3_bucket"],
+    ["object_with_override_default_tags", "random_pet.this"],
+    ["s3_bucket", "random_pet.this"],
+    ["s3_bucket_with_object_lock", "random_pet.this"]
+  ]
 }
