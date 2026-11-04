@@ -272,6 +272,11 @@ def from_terraform(path: str = ".") -> list[tuple[str, str]]:
     Parses ``resource`` blocks and finds cross-resource references
     (``resource_type.resource_name``) to infer dependencies.
 
+    Node labels are the resource name (``web``, ``main``). When that name is
+    used by more than one resource, the label is the full ``type.name``
+    instead, so ``aws_vpc.this`` and ``aws_internet_gateway.this`` stay
+    distinct.
+
     Args:
         path: Path to a .tf file or a directory containing .tf files.
 
@@ -308,8 +313,18 @@ def from_terraform(path: str = ".") -> list[tuple[str, str]]:
         for match in resource_pattern.finditer(content):
             res_type, res_name = match.group(1), match.group(2)
             full_name = f"{res_type}.{res_name}"
-            # Short label: use resource name, prefix with type if ambiguous
             resources[full_name] = res_name
+
+    # Bare resource names are the label, unless several resources share one
+    # (the `this` convention in terraform-aws-* modules, or public/private
+    # groups). Those keep `type.name` so distinct resources do not collapse
+    # into a single hub node. Unique names stay short.
+    name_counts: dict[str, int] = {}
+    for short in resources.values():
+        name_counts[short] = name_counts.get(short, 0) + 1
+    for full, short in list(resources.items()):
+        if name_counts[short] > 1:
+            resources[full] = full
 
     # Find references between resources
     edges: list[tuple[str, str]] = []
@@ -1013,17 +1028,177 @@ def _kwargs(call: ast.Call) -> dict[str, ast.expr]:
     return {kw.arg: kw.value for kw in call.keywords if kw.arg}
 
 
+_LG_SENTINELS = {"__end__": "END", "__start__": "START", "END": "END", "START": "START"}
+_LG_BUILDERS = {"StateGraph", "MessageGraph", "Graph"}
+
+
+def _preorder(node: ast.AST):
+    """Yield ``node`` and its children in source order."""
+    stack = [node]
+    while stack:
+        current = stack.pop()
+        yield current
+        stack.extend(reversed(list(ast.iter_child_nodes(current))))
+
+
+def _assigned_name_value(node: ast.AST) -> tuple[str, ast.expr] | None:
+    if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+        return node.targets[0].id, node.value
+    if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value is not None:
+        return node.target.id, node.value
+    return None
+
+
+def _call_name(fn: ast.expr) -> str | None:
+    if isinstance(fn, ast.Name):
+        return fn.id
+    if isinstance(fn, ast.Attribute):
+        return fn.attr
+    return None
+
+
+def _lg_norm(label: str | None) -> str | None:
+    if label is None:
+        return None
+    return _LG_SENTINELS.get(label, label)
+
+
+def _lg_targets(expr: ast.expr | None) -> list[str]:
+    """Literal goto targets: strings, END/START, lists, and conditional expressions.
+
+    A bare variable (``goto=next_node``) is dynamic, so it contributes nothing.
+    ``path_map`` values use :func:`_lg_path_targets`, which does keep names.
+    """
+    if expr is None:
+        return []
+    # py3.9 may wrap a subscript index in ast.Index.
+    if type(expr).__name__ == "Index":
+        return _lg_targets(getattr(expr, "value", None))
+    if isinstance(expr, (ast.List, ast.Tuple, ast.Set)):
+        out: list[str] = []
+        for elt in expr.elts:
+            out.extend(_lg_targets(elt))
+        return out
+    if isinstance(expr, ast.IfExp):
+        return _lg_targets(expr.body) + _lg_targets(expr.orelse)
+    if isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.BitOr):
+        return _lg_targets(expr.left) + _lg_targets(expr.right)
+    if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
+        norm = _lg_norm(expr.value)
+        return [norm] if norm else []
+    if isinstance(expr, ast.Name) and expr.id in ("END", "START"):
+        return [expr.id]
+    if isinstance(expr, ast.Attribute) and expr.attr in ("END", "START"):
+        return [expr.attr]
+    return []
+
+
+def _lg_path_targets(expr: ast.expr | None) -> list[str]:
+    """Targets in ``add_conditional_edges`` path maps, including node-name variables."""
+    if expr is None:
+        return []
+    if isinstance(expr, (ast.List, ast.Tuple, ast.Set)):
+        out: list[str] = []
+        for elt in expr.elts:
+            out.extend(_lg_path_targets(elt))
+        return out
+    if isinstance(expr, ast.IfExp):
+        return _lg_path_targets(expr.body) + _lg_path_targets(expr.orelse)
+    if isinstance(expr, ast.Attribute) and expr.attr in ("END", "START"):
+        return [expr.attr]
+    label = _lg_norm(_ast_str_arg(expr))
+    return [label] if label else []
+
+
+def _lg_annotation_targets(ann: ast.expr | None) -> list[str]:
+    """Targets from ``-> Command[Literal["a", "b"]]`` (including stringized annotations)."""
+    if isinstance(ann, ast.Constant) and isinstance(ann.value, str):
+        try:
+            parsed = ast.parse(ann.value, mode="eval").body
+        except SyntaxError:
+            return []
+        if not isinstance(parsed, ast.expr):
+            return []
+        ann = parsed
+    if not isinstance(ann, ast.Subscript):
+        return []
+    if _call_name(ann.value) != "Command":
+        return []
+    return _lg_type_targets(ann.slice)
+
+
+def _lg_type_targets(expr: ast.expr | None) -> list[str]:
+    """Targets inside ``Literal[...]``, a union of those, or a bare literal list."""
+    if expr is None:
+        return []
+    if type(expr).__name__ == "Index":
+        return _lg_type_targets(getattr(expr, "value", None))
+    if isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.BitOr):
+        return _lg_type_targets(expr.left) + _lg_type_targets(expr.right)
+    if isinstance(expr, ast.Tuple):
+        out: list[str] = []
+        for elt in expr.elts:
+            out.extend(_lg_type_targets(elt))
+        return out
+    if isinstance(expr, ast.Subscript) and _call_name(expr.value) == "Literal":
+        return _lg_targets(expr.slice)
+    return _lg_targets(expr)
+
+
+def _node_functions(tree: ast.AST) -> dict[str, ast.FunctionDef | ast.AsyncFunctionDef]:
+    """Map function name -> the def ``add_node`` is most likely to close over.
+
+    A name defined at class or module scope beats a same-named function nested
+    inside another function (that inner def does not rebind the outer name).
+    Within each bucket the last definition in source order wins. If the name
+    exists only as a nested function, that def is used — node functions are
+    sometimes declared inside the builder function.
+    """
+    top: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+    nested: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+
+    def visit(node: ast.AST, in_function: bool) -> None:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            (nested if in_function else top)[node.name] = node
+            in_function = True
+        for child in ast.iter_child_nodes(node):
+            visit(child, in_function)
+
+    visit(tree, False)
+    chosen: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = dict(nested)
+    chosen.update(top)
+    return chosen
+
+
+def _calls_skipping_nested(fn: ast.FunctionDef | ast.AsyncFunctionDef):
+    """Calls in ``fn``'s body, not calls inside a nested function, class, or lambda."""
+    stack: list[ast.AST] = list(reversed(fn.body))
+    while stack:
+        current = stack.pop()
+        if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            continue
+        if isinstance(current, ast.Call):
+            yield current
+        stack.extend(reversed(list(ast.iter_child_nodes(current))))
+
+
 def from_langgraph(path: str) -> list[tuple[str, str]]:
     """Extract edges from a LangGraph workflow definition.
 
-    Recognized patterns (the variable name in front of `.add_edge` etc. is
-    irrelevant — we match on the method name):
+    Recognized patterns:
 
-    - ``g.add_edge("planner", "researcher")``
-    - ``g.add_edge(START, "planner")``
+    - ``g.add_edge("planner", "researcher")`` / ``g.add_edge(START, "planner")``
     - ``g.add_conditional_edges("planner", router, {"yes": "act", "no": "end"})``
-    - ``g.set_entry_point("planner")``  ->  ``START -> planner``
-    - ``g.set_finish_point("act")``     ->  ``act -> END``
+    - ``g.set_entry_point("planner")`` / ``g.set_finish_point("act")``
+    - ``Command(goto="next")`` / ``Command(goto=[...])`` returned from a node
+      function, and ``-> Command[Literal["a", "b"]]`` return annotations
+      (``__end__`` / ``__start__`` normalize to ``END`` / ``START``)
+    - several ``StateGraph`` builders in one file. Each keeps its own
+      START/END. A builder compiled and mounted as a node of another graph
+      (``parent.add_node("x", sub.compile())``) is wired in as
+      ``x -> <sub entry>`` and ``<sub exit> -> x``. Any other extra builder
+      uses ``START[<builder>]`` / ``END[<builder>]``. The last builder in
+      the file that is not mounted keeps the bare ``START`` / ``END`` labels.
 
     Args:
         path: Path to a Python file defining the graph.
@@ -1034,46 +1209,150 @@ def from_langgraph(path: str) -> list[tuple[str, str]]:
     with open(path, encoding="utf-8") as f:
         tree = ast.parse(f.read(), filename=path)
 
-    edges: list[tuple[str, str]] = []
-    for node in ast.walk(tree):
+    # 1. Builders (`x = StateGraph(...)`) and compiled aliases (`y = x.compile()`),
+    # in source order so "last graph" is the last one in the file.
+    builders: list[str] = []
+    builder_set: set[str] = set()
+    compiled: dict[str, str] = {}
+    for node in _preorder(tree):
+        assigned = _assigned_name_value(node)
+        if assigned is None:
+            continue
+        var, value = assigned
+        if not isinstance(value, ast.Call):
+            continue
+        fname = _call_name(value.func)
+        if fname in _LG_BUILDERS:
+            builders.append(var)
+            builder_set.add(var)
+        elif (
+            fname == "compile"
+            and isinstance(value.func, ast.Attribute)
+            and isinstance(value.func.value, ast.Name)
+            and value.func.value.id in builder_set
+        ):
+            compiled[var] = value.func.value.id
+
+    def _owner(call: ast.Call) -> str | None:
+        fn = call.func
+        if isinstance(fn, ast.Attribute) and isinstance(fn.value, ast.Name):
+            return fn.value.id
+        return None
+
+    # 2. Raw per-builder edges; node -> function and node -> mounted subgraph.
+    raw: list[tuple[str | None, str, str]] = []
+    func_to_nodes: dict[str, list[tuple[str | None, str]]] = {}
+    mounted: dict[str, tuple[str | None, str]] = {}
+
+    def _mount_target(action: ast.expr | None, owner: str | None, node_name: str) -> None:
+        if isinstance(action, ast.Name):
+            if action.id in compiled:
+                mounted[compiled[action.id]] = (owner, node_name)
+            elif action.id in builder_set:
+                mounted[action.id] = (owner, node_name)
+            else:
+                func_to_nodes.setdefault(action.id, []).append((owner, node_name))
+        elif (
+            isinstance(action, ast.Call)
+            and isinstance(action.func, ast.Attribute)
+            and action.func.attr == "compile"
+            and isinstance(action.func.value, ast.Name)
+            and action.func.value.id in builder_set
+        ):
+            mounted[action.func.value.id] = (owner, node_name)
+
+    for node in _preorder(tree):
         if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
             continue
         method = node.func.attr
+        owner = _owner(node)
 
         if method == "add_edge" and len(node.args) >= 2:
-            s = _ast_str_arg(node.args[0])
-            t = _ast_str_arg(node.args[1])
+            s = _lg_norm(_ast_str_arg(node.args[0]))
+            t = _lg_norm(_ast_str_arg(node.args[1]))
             if s and t:
-                edges.append((s, t))
+                raw.append((owner, s, t))
 
         elif method == "add_conditional_edges":
             if not node.args:
                 continue
-            src = _ast_str_arg(node.args[0])
+            src = _lg_norm(_ast_str_arg(node.args[0]))
             if not src:
                 continue
-            # Optional 3rd arg: dict mapping {condition: target}
             mapping_node: ast.expr | None = None
             if len(node.args) >= 3:
                 mapping_node = node.args[2]
             else:
-                mapping_node = _kwargs(node).get("path_map") or _kwargs(node).get("conditional_edge_mapping")
+                kw = _kwargs(node)
+                mapping_node = kw.get("path_map") or kw.get("conditional_edge_mapping")
             if isinstance(mapping_node, ast.Dict):
-                for v in mapping_node.values:
-                    target = _ast_str_arg(v)
-                    if target:
-                        edges.append((src, target))
+                for value in mapping_node.values:
+                    for target in _lg_path_targets(value):
+                        raw.append((owner, src, target))
+            elif isinstance(mapping_node, (ast.List, ast.Tuple)):
+                for target in _lg_path_targets(mapping_node):
+                    raw.append((owner, src, target))
 
         elif method == "set_entry_point" and node.args:
-            t = _ast_str_arg(node.args[0])
+            t = _lg_norm(_ast_str_arg(node.args[0]))
             if t:
-                edges.append(("START", t))
+                raw.append((owner, "START", t))
 
         elif method == "set_finish_point" and node.args:
-            s = _ast_str_arg(node.args[0])
+            s = _lg_norm(_ast_str_arg(node.args[0]))
             if s:
-                edges.append((s, "END"))
+                raw.append((owner, s, "END"))
 
+        elif method == "add_node":
+            kw = _kwargs(node)
+            if node.args:
+                first = node.args[0]
+                action = node.args[1] if len(node.args) > 1 else kw.get("action")
+            else:
+                first = kw.get("node")
+                action = kw.get("action")
+            if first is None:
+                continue
+            if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                _mount_target(action, owner, first.value)
+            elif isinstance(first, ast.Name) and action is None:
+                # add_node(fn) uses the function name as the node id.
+                _mount_target(first, owner, first.id)
+            elif isinstance(first, ast.Name):
+                _mount_target(action if action is not None else first, owner, first.id)
+
+    # 3. Command(goto=...) and Command[Literal[...]] on the node functions themselves.
+    for fdef in _node_functions(tree).values():
+        if fdef.name not in func_to_nodes:
+            continue
+        targets = list(_lg_annotation_targets(fdef.returns))
+        for call in _calls_skipping_nested(fdef):
+            if _call_name(call.func) == "Command":
+                targets.extend(_lg_targets(_kwargs(call).get("goto")))
+        for node_owner, node_name in func_to_nodes[fdef.name]:
+            for target in targets:
+                raw.append((node_owner, node_name, target))
+
+    # 4. Resolve START/END per builder. A mounted subgraph's START/END become
+    # the parent node. With several unmounted builders, only the last-defined
+    # one (conventionally the top-level graph) keeps bare labels.
+    unmounted = [b for b in builders if b not in mounted]
+    top = unmounted[-1] if unmounted else None
+
+    def _resolve(owner: str | None, label: str) -> str:
+        if label not in ("START", "END"):
+            return label
+        if owner in mounted:
+            return mounted[owner][1]
+        if owner in builder_set and owner != top:
+            return f"{label}[{owner}]"
+        return label
+
+    edges: list[tuple[str, str]] = []
+    for owner, src, dst in raw:
+        resolved_src, resolved_dst = _resolve(owner, src), _resolve(owner, dst)
+        if resolved_src != resolved_dst:
+            edges.append((resolved_src, resolved_dst))
     return _dedupe(edges)
 
 
@@ -1088,13 +1367,20 @@ def from_crewai(path: str) -> list[tuple[str, str]]:
         emits ``prep_task -> my_task`` and ``lookup_task -> my_task``
     - ``Crew(agents=[a, b], tasks=[t1, t2], manager_agent=mgr)``
         emits ``mgr -> a``, ``mgr -> b`` (manager broadcasts)
+    - ``@CrewBase`` classes with ``@agent`` / ``@task`` / ``@crew`` methods
+        (the ``crewai create crew`` layout, including ``config/tasks.yaml``).
+        Each task's agent emits ``agent -> task``. ``Process.sequential``
+        (the default) chains tasks in method order. ``context:`` in YAML or
+        ``context=[...]`` on the ``Task`` emits those dependency edges.
+        ``Process.hierarchical`` with ``manager_agent`` emits ``manager -> agent``
+        and does not add the sequential chain.
 
     Args:
         path: Path to a Python file using crewai.
 
     Returns:
-        Deduped list of edges. Node names are the Python variable names
-        from the source file.
+        Deduped list of edges. Node names are the Python variable or method
+        names from the source file.
     """
     with open(path, encoding="utf-8") as f:
         tree = ast.parse(f.read(), filename=path)
@@ -1145,7 +1431,174 @@ def from_crewai(path: str) -> list[tuple[str, str]]:
                     if a != manager:
                         edges.append((manager, a))
 
+    edges.extend(_crewai_decorator_edges(tree, path))
     return _dedupe(edges)
+
+
+def _decorator_names(fn: ast.AST) -> set[str]:
+    names: set[str] = set()
+    for deco in getattr(fn, "decorator_list", []):
+        node = deco.func if isinstance(deco, ast.Call) else deco
+        if isinstance(node, ast.Name):
+            names.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            names.add(node.attr)
+    return names
+
+
+def _self_call_name(expr: ast.expr | None) -> str | None:
+    """``self.foo()`` / ``self.foo`` / ``foo()`` / ``foo`` -> ``foo``."""
+    if isinstance(expr, ast.Call):
+        expr = expr.func
+    if isinstance(expr, ast.Attribute) and isinstance(expr.value, ast.Name) and expr.value.id == "self":
+        return expr.attr
+    if isinstance(expr, ast.Name):
+        return expr.id
+    return None
+
+
+def _subscript_str(node: ast.Subscript) -> str | None:
+    """String literal inside ``obj["key"]``. Variable keys are not yaml names."""
+    sl: ast.expr = node.slice
+    if type(sl).__name__ == "Index":
+        inner = getattr(sl, "value", None)
+        if not isinstance(inner, ast.expr):
+            return None
+        sl = inner
+    if isinstance(sl, ast.Constant) and isinstance(sl.value, str):
+        return sl.value
+    return None
+
+
+def _class_string_attr(cls: ast.ClassDef, name: str) -> str | None:
+    for stmt in cls.body:
+        value: ast.expr | None = None
+        target: ast.expr | None = None
+        if isinstance(stmt, ast.Assign):
+            value = stmt.value
+            for item in stmt.targets:
+                if isinstance(item, ast.Name) and item.id == name:
+                    target = item
+                    break
+        elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name) and stmt.target.id == name:
+            target = stmt.target
+            value = stmt.value
+        if target is not None and isinstance(value, ast.Constant) and isinstance(value.value, str):
+            return value.value
+    return None
+
+
+def _crewai_task_yaml(path: str, cls: ast.ClassDef) -> dict[str, Any]:
+    """Load the class's tasks YAML. Missing or unreadable files yield ``{}``."""
+    rel = _class_string_attr(cls, "tasks_config") or "config/tasks.yaml"
+    yaml_path = rel if os.path.isabs(rel) else os.path.join(os.path.dirname(path), rel)
+    if not os.path.isfile(yaml_path):
+        return {}
+    try:
+        data = _load_single_yaml(yaml_path) or {}
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _crewai_decorator_edges(tree: ast.AST, path: str) -> list[tuple[str, str]]:
+    """Edges for the ``@CrewBase`` project layout (``crewai create crew``).
+
+    Task order follows the class body: a redefined method keeps its first
+    slot and its last body, which is how the class dict behaves. That is the
+    order ``CrewBase`` runs ``Process.sequential`` in.
+    """
+    edges: list[tuple[str, str]] = []
+    for cls in ast.walk(tree):
+        if not isinstance(cls, ast.ClassDef):
+            continue
+        methods = [n for n in cls.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        task_methods = [m for m in methods if "task" in _decorator_names(m)]
+        agent_methods = [m.name for m in methods if "agent" in _decorator_names(m)]
+        if not task_methods and not agent_methods:
+            continue
+
+        order: list[str] = []
+        last_def: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+        for method in task_methods:
+            if method.name not in last_def:
+                order.append(method.name)
+            last_def[method.name] = method
+
+        explicit_agent: set[str] = set()
+        yaml_key_for: dict[str, str] = {}
+        for name in order:
+            method = last_def[name]
+            for call in _calls_skipping_nested(method):
+                if _call_name(call.func) != "Task":
+                    continue
+                kw = _kwargs(call)
+                agent = _self_call_name(kw.get("agent"))
+                if agent:
+                    edges.append((agent, name))
+                    explicit_agent.add(name)
+                ctx = kw.get("context")
+                if isinstance(ctx, (ast.List, ast.Tuple)):
+                    for item in ctx.elts:
+                        ctx_name = _self_call_name(item)
+                        if ctx_name:
+                            edges.append((ctx_name, name))
+                elif isinstance(ctx, ast.Constant) and isinstance(ctx.value, str):
+                    edges.append((ctx.value, name))
+                cfg = kw.get("config")
+                if isinstance(cfg, ast.Subscript):
+                    key = _subscript_str(cfg)
+                    if key:
+                        yaml_key_for[name] = key
+
+        tasks_yaml = _crewai_task_yaml(path, cls)
+        key_to_method = {key: method for method, key in yaml_key_for.items()}
+        for key, spec in tasks_yaml.items():
+            if not isinstance(spec, dict):
+                continue
+            task_name = key_to_method.get(key, key if key in last_def else None)
+            if task_name is None or task_name not in last_def:
+                continue
+            if task_name not in explicit_agent:
+                agent = spec.get("agent")
+                if isinstance(agent, str) and agent:
+                    edges.append((agent, task_name))
+            context = spec.get("context") or []
+            if isinstance(context, str):
+                context = [context]
+            if isinstance(context, list):
+                for item in context:
+                    if isinstance(item, str) and item:
+                        edges.append((key_to_method.get(item, item), task_name))
+
+        process = "sequential"
+        manager: str | None = None
+        for method in methods:
+            if "crew" not in _decorator_names(method):
+                continue
+            if not isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for call in _calls_skipping_nested(method):
+                if _call_name(call.func) != "Crew":
+                    continue
+                kw = _kwargs(call)
+                proc = kw.get("process")
+                if isinstance(proc, ast.Attribute):
+                    process = proc.attr
+                elif isinstance(proc, ast.Constant) and isinstance(proc.value, str):
+                    process = proc.value
+                # Last Crew() in the @crew method wins; manager fan-out is not
+                # repeated when the method builds the crew more than once.
+                found = _self_call_name(kw.get("manager_agent"))
+                manager = found
+        if manager:
+            for agent in agent_methods:
+                if agent != manager:
+                    edges.append((manager, agent))
+        if process.lower() == "sequential":
+            for left, right in zip(order, order[1:]):
+                edges.append((left, right))
+    return edges
 
 
 def from_autogen(path: str) -> list[tuple[str, str]]:
@@ -1290,30 +1743,94 @@ def from_autogen(path: str) -> list[tuple[str, str]]:
 # Auto-detect
 # ---------------------------------------------------------------------------
 
-def from_directory(path: str = ".") -> tuple[list[tuple[str, str]], dict[str, int]]:
+_DIRECTORY_SOURCES = frozenset({
+    "docker-compose",
+    "kubernetes",
+    "github-actions",
+    "terraform",
+    "python-imports",
+    "package-json",
+    "otel-traces",
+    "langgraph",
+    "crewai",
+    "autogen",
+    "aws-cdk",
+    "pulumi",
+    "cloudformation",
+})
+
+
+def _source_selection(value: Any, param: str) -> set[str] | None:
+    """Normalize ``include`` / ``exclude`` to a set of known source labels."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        labels = {value}
+    elif isinstance(value, (set, list, tuple, frozenset)):
+        labels = set()
+        for item in value:
+            if not isinstance(item, str):
+                raise TypeError(f"{param} entries must be source-name strings, got {type(item).__name__}")
+            labels.add(item)
+    else:
+        raise TypeError(f"{param} must be a source name or a collection of source names")
+    unknown = labels - _DIRECTORY_SOURCES
+    if unknown:
+        known = ", ".join(sorted(_DIRECTORY_SOURCES))
+        bad = ", ".join(sorted(unknown))
+        raise ValueError(f"Unknown {param} source(s): {bad}. Known sources: {known}.")
+    return labels
+
+
+def from_directory(
+    path: str = ".",
+    *,
+    include: set[str] | list[str] | tuple[str, ...] | str | None = None,
+    exclude: set[str] | list[str] | tuple[str, ...] | str | None = None,
+) -> tuple[list[tuple[str, str]], dict[str, int]]:
     """Scan a directory and extract edges from all recognized infrastructure files.
 
     Auto-detects docker-compose, Kubernetes manifests, GitHub Actions
-    workflows, and Terraform files.
+    workflows, Terraform, Python imports, and the other parsers in this module.
 
     Args:
         path: Directory to scan (default: current directory).
+        include: If given, only these source labels are scanned.
+        exclude: Source labels to skip. Applied after ``include``.
+
+    ``include`` / ``exclude`` take source labels: ``docker-compose``,
+    ``kubernetes``, ``github-actions``, ``terraform``, ``python-imports``,
+    ``package-json``, ``otel-traces``, ``langgraph``, ``crewai``, ``autogen``,
+    ``aws-cdk``, ``pulumi``, ``cloudformation``. A single label may be passed
+    as a string. The default (both omitted) scans every source, same as before.
 
     Returns:
         Tuple of (edges, sources) where sources maps format name to edge count.
 
+    Raises:
+        ValueError: if ``include`` or ``exclude`` names a source this scanner
+            does not know.
+        TypeError: if a filter is not a string or a collection of strings.
+
     Example::
 
         edges, sources = depgraph_extract.extract.from_directory(".")
-        print(f"Found {len(edges)} edges from {sources}")
+        edges, sources = depgraph_extract.extract.from_directory(
+            ".", exclude={"github-actions", "python-imports"},
+        )
     """
     all_edges: list[tuple[str, str]] = []
     sources: dict[str, int] = {}
+    chosen = _source_selection(include, "include")
+    skipped = _source_selection(exclude, "exclude") or set()
+
+    def _want(label: str) -> bool:
+        return (chosen is None or label in chosen) and label not in skipped
 
     # Docker Compose
     for name in ["docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"]:
         compose_path = os.path.join(path, name)
-        if os.path.isfile(compose_path):
+        if os.path.isfile(compose_path) and _want("docker-compose"):
             try:
                 edges = from_docker_compose(compose_path)
                 if edges:
@@ -1327,29 +1844,30 @@ def from_directory(path: str = ".") -> tuple[list[tuple[str, str]], dict[str, in
     # names. This catches manifests in non-standard locations (e.g. release/,
     # kubernetes-manifests/). Running once per directory keeps cross-file
     # Service->Deployment selector matching intact.
-    k8s_dirs_found: set[str] = set()
-    for ext in ("**/*.yaml", "**/*.yml"):
-        for fp in glob.glob(os.path.join(path, ext), recursive=True):
-            if any(p in fp for p in ("node_modules", ".venv", "venv", ".git")):
-                continue
+    if _want("kubernetes"):
+        k8s_dirs_found: set[str] = set()
+        for ext in ("**/*.yaml", "**/*.yml"):
+            for fp in glob.glob(os.path.join(path, ext), recursive=True):
+                if any(p in fp for p in ("node_modules", ".venv", "venv", ".git")):
+                    continue
+                try:
+                    head = open(fp, encoding="utf-8", errors="replace").read(2048)
+                except OSError:
+                    continue
+                if "apiVersion:" in head and "kind:" in head:
+                    k8s_dirs_found.add(os.path.dirname(fp) or path)
+        for d in sorted(k8s_dirs_found):
             try:
-                head = open(fp, encoding="utf-8", errors="replace").read(2048)
-            except OSError:
-                continue
-            if "apiVersion:" in head and "kind:" in head:
-                k8s_dirs_found.add(os.path.dirname(fp) or path)
-    for d in sorted(k8s_dirs_found):
-        try:
-            edges = from_kubernetes(d)
-            if edges:
-                all_edges.extend(edges)
-                sources["kubernetes"] = sources.get("kubernetes", 0) + len(edges)
-        except Exception:
-            pass
+                edges = from_kubernetes(d)
+                if edges:
+                    all_edges.extend(edges)
+                    sources["kubernetes"] = sources.get("kubernetes", 0) + len(edges)
+            except Exception:
+                pass
 
     # GitHub Actions
     gh_path = os.path.join(path, ".github", "workflows")
-    if os.path.isdir(gh_path):
+    if os.path.isdir(gh_path) and _want("github-actions"):
         try:
             edges = from_github_actions(gh_path)
             if edges:
@@ -1359,7 +1877,7 @@ def from_directory(path: str = ".") -> tuple[list[tuple[str, str]], dict[str, in
             pass
 
     # Terraform
-    tf_files = glob.glob(os.path.join(path, "**/*.tf"), recursive=True)
+    tf_files = glob.glob(os.path.join(path, "**/*.tf"), recursive=True) if _want("terraform") else []
     if tf_files:
         try:
             edges = from_terraform(path)
@@ -1370,11 +1888,14 @@ def from_directory(path: str = ".") -> tuple[list[tuple[str, str]], dict[str, in
             pass
 
     # Python imports
-    py_files = glob.glob(os.path.join(path, "**/*.py"), recursive=True)
-    # Filter out venv/node_modules/hidden dirs
-    py_files = [f for f in py_files if not any(
-        p in f for p in ["node_modules", ".venv", "venv", "__pycache__", ".git"]
-    )]
+    if _want("python-imports"):
+        py_files = glob.glob(os.path.join(path, "**/*.py"), recursive=True)
+        # Filter out venv/node_modules/hidden dirs
+        py_files = [f for f in py_files if not any(
+            p in f for p in ["node_modules", ".venv", "venv", "__pycache__", ".git"]
+        )]
+    else:
+        py_files = []
     if py_files:
         try:
             edges = from_python_imports(path)
@@ -1386,7 +1907,7 @@ def from_directory(path: str = ".") -> tuple[list[tuple[str, str]], dict[str, in
 
     # package.json (monorepo workspaces)
     root_pkg = os.path.join(path, "package.json")
-    if os.path.isfile(root_pkg):
+    if os.path.isfile(root_pkg) and _want("package-json"):
         try:
             edges = from_package_json_workspaces(path)
             if edges:
@@ -1397,27 +1918,28 @@ def from_directory(path: str = ".") -> tuple[list[tuple[str, str]], dict[str, in
 
     # OpenTelemetry traces — covers the highest-quality edge source (real
     # runtime calls). Auto-picked up from common filenames at the root.
-    for name in ["traces.json", "otel.json", "otlp.json", "jaeger.json", "zipkin.json"]:
-        trace_path = os.path.join(path, name)
-        if os.path.isfile(trace_path):
-            try:
-                edges = from_otel_traces(trace_path)
-                if edges:
-                    all_edges.extend(edges)
-                    sources["otel-traces"] = sources.get("otel-traces", 0) + len(edges)
-            except Exception:
-                pass
-    # Also try a `traces/` directory containing one or more trace files
-    traces_dir = os.path.join(path, "traces")
-    if os.path.isdir(traces_dir):
-        for fname in glob.glob(os.path.join(traces_dir, "*.json")):
-            try:
-                edges = from_otel_traces(fname)
-                if edges:
-                    all_edges.extend(edges)
-                    sources["otel-traces"] = sources.get("otel-traces", 0) + len(edges)
-            except Exception:
-                pass
+    if _want("otel-traces"):
+        for name in ["traces.json", "otel.json", "otlp.json", "jaeger.json", "zipkin.json"]:
+            trace_path = os.path.join(path, name)
+            if os.path.isfile(trace_path):
+                try:
+                    edges = from_otel_traces(trace_path)
+                    if edges:
+                        all_edges.extend(edges)
+                        sources["otel-traces"] = sources.get("otel-traces", 0) + len(edges)
+                except Exception:
+                    pass
+        # Also try a `traces/` directory containing one or more trace files
+        traces_dir = os.path.join(path, "traces")
+        if os.path.isdir(traces_dir):
+            for fname in glob.glob(os.path.join(traces_dir, "*.json")):
+                try:
+                    edges = from_otel_traces(fname)
+                    if edges:
+                        all_edges.extend(edges)
+                        sources["otel-traces"] = sources.get("otel-traces", 0) + len(edges)
+                except Exception:
+                    pass
 
     # AI agent frameworks + AWS CDK + Pulumi — for each file that imports a
     # known framework, run the matching parser on JUST that file (cheaper +
@@ -1429,7 +1951,8 @@ def from_directory(path: str = ".") -> tuple[list[tuple[str, str]], dict[str, in
         ("aws-cdk",     ("aws_cdk", "aws_cdk_lib"),              from_aws_cdk),
         ("pulumi",      ("pulumi",),                             from_pulumi),
     )
-    py_files = glob.glob(os.path.join(path, "**/*.py"), recursive=True)
+    py_specs = tuple(spec for spec in py_specs if _want(spec[0]))
+    py_files = glob.glob(os.path.join(path, "**/*.py"), recursive=True) if py_specs else []
     py_files = [f for f in py_files if not any(
         p in f for p in ["node_modules", ".venv", "venv", "__pycache__", ".git"]
     )]
@@ -1457,7 +1980,7 @@ def from_directory(path: str = ".") -> tuple[list[tuple[str, str]], dict[str, in
         if os.path.isdir(os.path.join(path, d))
     ]
     seen_cfn: set[str] = set()
-    for d in cfn_dirs:
+    for d in (cfn_dirs if _want("cloudformation") else []):
         if not os.path.isdir(d):
             continue
         for ext in ("*.yaml", "*.yml", "*.json", "*.template"):

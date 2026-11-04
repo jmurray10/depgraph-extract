@@ -1,0 +1,7 @@
+plan_task:
+  description: plan
+scout_task:
+  description: scout
+compile_task:
+  description: compile
+  context: [plan_task]
