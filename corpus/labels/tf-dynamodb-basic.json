@@ -1,0 +1,5 @@
+{
+  "edges": [
+    ["dynamodb_table", "this"]
+  ]
+}

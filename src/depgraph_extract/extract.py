@@ -106,7 +106,9 @@ def from_kubernetes(path: str = ".") -> list[tuple[str, str]]:
     """Extract service dependency edges from Kubernetes YAML manifests.
 
     Scans for Deployment/Service/Ingress resources and infers edges from
-    label selectors, service references, and ingress backends.
+    label selectors, service references, and ingress backends. A metadata
+    name used by more than one object is qualified (``Service/frontend``,
+    ``Deployment/frontend``) so that pair is not dropped as a self-loop.
 
     Args:
         path: Path to a YAML file or a directory containing YAML files.
@@ -151,13 +153,34 @@ def from_kubernetes(path: str = ".") -> list[tuple[str, str]]:
         elif kind == "Ingress":
             ingresses.append(res)
 
+    # A Service and its Deployment often share a metadata name. Qualify any
+    # name that belongs to more than one object so that link is
+    # ``Service/frontend -> Deployment/frontend`` instead of a dropped self-loop.
+    # Names that appear once stay bare.
+    named: list[tuple[str, str]] = []
+    for svc_name in services:
+        named.append(("Service", svc_name))
+    for dep_name, dep in deployments.items():
+        named.append((dep.get("kind") or "Deployment", dep_name))
+    for ing in ingresses:
+        named.append(("Ingress", ing.get("metadata", {}).get("name", "ingress")))
+    name_counts: dict[str, int] = {}
+    for _kind, name in named:
+        name_counts[name] = name_counts.get(name, 0) + 1
+
+    def _k8s_label(kind: str, name: str) -> str:
+        if name_counts.get(name, 0) > 1:
+            return f"{kind}/{name}"
+        return name
+
     edges: list[tuple[str, str]] = []
 
-    # Service -> Deployment via selector matching
+    # Service -> workload via selector matching
     for svc_name, svc in services.items():
         svc_selector = svc.get("spec", {}).get("selector", {})
         if not svc_selector:
             continue
+        src = _k8s_label("Service", svc_name)
         for dep_name, dep in deployments.items():
             dep_labels = (
                 dep.get("spec", {})
@@ -166,11 +189,13 @@ def from_kubernetes(path: str = ".") -> list[tuple[str, str]]:
                 .get("labels", {})
             )
             if _selectors_match(svc_selector, dep_labels):
-                edges.append((svc_name, dep_name))
+                dst = _k8s_label(dep.get("kind") or "Deployment", dep_name)
+                edges.append((src, dst))
 
     # Ingress -> Service via backend references
     for ing in ingresses:
         ing_name = ing.get("metadata", {}).get("name", "ingress")
+        src = _k8s_label("Ingress", ing_name)
         rules = ing.get("spec", {}).get("rules", [])
         for rule in rules:
             paths = rule.get("http", {}).get("paths", [])
@@ -178,7 +203,7 @@ def from_kubernetes(path: str = ".") -> list[tuple[str, str]]:
                 backend = p.get("backend", {})
                 svc_ref = backend.get("service", {}).get("name") or backend.get("serviceName")
                 if svc_ref:
-                    edges.append((ing_name, svc_ref))
+                    edges.append((src, _k8s_label("Service", svc_ref)))
 
     # Env var references between deployments (SERVICE_HOST patterns)
     for dep_name, dep in deployments.items():
@@ -188,13 +213,17 @@ def from_kubernetes(path: str = ".") -> list[tuple[str, str]]:
             .get("spec", {})
             .get("containers", [])
         )
+        dep_kind = dep.get("kind") or "Deployment"
         for container in containers:
             for env in container.get("env", []):
                 val = env.get("value", "")
                 if isinstance(val, str):
                     for svc_name in services:
                         if svc_name in val and svc_name != dep_name:
-                            edges.append((dep_name, svc_name))
+                            edges.append((
+                                _k8s_label(dep_kind, dep_name),
+                                _k8s_label("Service", svc_name),
+                            ))
 
     return _dedupe(edges)
 
@@ -271,13 +300,14 @@ def from_github_actions(path: str = ".github/workflows") -> list[tuple[str, str]
 def from_terraform(path: str = ".") -> list[tuple[str, str]]:
     """Extract resource dependency edges from Terraform files.
 
-    Parses ``resource`` blocks and finds cross-resource references
-    (``resource_type.resource_name``) to infer dependencies.
+    Parses ``resource`` and ``module`` blocks. A block depends on every
+    ``type.name`` resource or ``module.name`` output it references. Each
+    block body stops at its own closing brace, so later blocks are not
+    attributed to the previous resource.
 
-    Node labels are the resource name (``web``, ``main``). When that name is
-    used by more than one resource, the label is the full ``type.name``
-    instead, so ``aws_vpc.this`` and ``aws_internet_gateway.this`` stay
-    distinct.
+    Node labels are the resource or module name (``web``, ``main``). When
+    that name is shared, the label is the full address (``aws_vpc.this``,
+    ``module.vpc``).
 
     Args:
         path: Path to a .tf file or a directory containing .tf files.
@@ -294,16 +324,12 @@ def from_terraform(path: str = ".") -> list[tuple[str, str]]:
     else:
         files = [path]
 
-    # Collect all resource names
-    resource_pattern = re.compile(
-        r'resource\s+"([^"]+)"\s+"([^"]+)"\s*\{', re.MULTILINE
-    )
-    # Match `type.name` optionally followed by a `[index]` (count / for_each),
-    # e.g. `aws_subnet.this[0].id` or `aws_eip.nat[count.index].id`.
-    ref_pattern = re.compile(r"(\w+\.\w+)(?:\[[^\]]*\])?\.")
+    # `type.name` or `module.name`, optionally indexed, then an attribute.
+    # e.g. `aws_subnet.this[0].id`, `module.vpc.vpc_id`.
+    ref_pattern = re.compile(r"((?:module\.)?\w+\.\w+)(?:\[[^\]]*\])?\.")
 
-    resources: dict[str, str] = {}  # "type.name" -> short label
-    file_contents: dict[str, str] = {}
+    addresses: dict[str, str] = {}  # full address -> short label
+    blocks: list[tuple[str, str]] = []  # (address, body)
 
     for f in files:
         try:
@@ -311,43 +337,132 @@ def from_terraform(path: str = ".") -> list[tuple[str, str]]:
                 content = fh.read()
         except Exception:
             continue
-        file_contents[f] = content
-        for match in resource_pattern.finditer(content):
-            res_type, res_name = match.group(1), match.group(2)
-            full_name = f"{res_type}.{res_name}"
-            resources[full_name] = res_name
+        for address, short, body in _tf_blocks(content):
+            addresses[address] = short
+            blocks.append((address, body))
 
-    # Bare resource names are the label, unless several resources share one
-    # (the `this` convention in terraform-aws-* modules, or public/private
-    # groups). Those keep `type.name` so distinct resources do not collapse
-    # into a single hub node. Unique names stay short.
     name_counts: dict[str, int] = {}
-    for short in resources.values():
+    for short in addresses.values():
         name_counts[short] = name_counts.get(short, 0) + 1
-    for full, short in list(resources.items()):
+    for full, short in list(addresses.items()):
         if name_counts[short] > 1:
-            resources[full] = full
+            addresses[full] = full
 
-    # Find references between resources
     edges: list[tuple[str, str]] = []
-    for f, content in file_contents.items():
-        # Split by resource blocks
-        blocks = re.split(r'(resource\s+"[^"]+"\s+"[^"]+"\s*\{)', content)
-        current_resource = None
-        for block in blocks:
-            res_match = resource_pattern.match(block.strip())
-            if res_match:
-                current_resource = f"{res_match.group(1)}.{res_match.group(2)}"
-                continue
-            if current_resource and current_resource in resources:
-                for ref_match in ref_pattern.finditer(block):
-                    ref = ref_match.group(1)
-                    if ref in resources and ref != current_resource:
-                        src_label = resources[current_resource]
-                        dst_label = resources[ref]
-                        edges.append((src_label, dst_label))
+    for address, body in blocks:
+        if address not in addresses:
+            continue
+        src_label = addresses[address]
+        for ref_match in ref_pattern.finditer(body):
+            ref = ref_match.group(1)
+            if ref in addresses and ref != address:
+                edges.append((src_label, addresses[ref]))
 
     return _dedupe(edges)
+
+
+def _tf_blocks(content: str):
+    """Yield ``(address, short_name, body)`` for resource and module blocks.
+
+    The body is the text between the header's opening brace and its matching
+    close, so a later ``module`` is not part of the previous ``resource``.
+    """
+    header = re.compile(
+        r'(resource|module)\s+"([^"]+)"(?:\s+"([^"]+)")?\s*\{'
+    )
+    pos = 0
+    while True:
+        match = header.search(content, pos)
+        if not match:
+            break
+        kind, first, second = match.group(1), match.group(2), match.group(3)
+        if kind == "resource" and second:
+            address, short = f"{first}.{second}", second
+        elif kind == "module":
+            address, short = f"module.{first}", first
+        else:
+            pos = match.end()
+            continue
+        body_start = match.end()
+        end = _tf_block_end(content, body_start)
+        yield address, short, content[body_start:end]
+        pos = end + 1
+
+
+def _tf_skip_heredoc(content: str, start: int) -> int:
+    """Return the index just after a ``<<MARKER`` / ``<<-MARKER`` body."""
+    i = start + 2
+    n = len(content)
+    if i < n and content[i] == "-":
+        i += 1
+    quote = ""
+    if i < n and content[i] in {'"', "'"}:
+        quote = content[i]
+        i += 1
+    marker_start = i
+    while i < n and (content[i].isalnum() or content[i] == "_"):
+        i += 1
+    marker = content[marker_start:i]
+    if not marker:
+        return start + 2
+    if quote and i < n and content[i] == quote:
+        i += 1
+    line = content.find("\n", i)
+    if line < 0:
+        return n
+    line += 1
+    while line < n:
+        line_end = content.find("\n", line)
+        if line_end < 0:
+            line_end = n
+        if content[line:line_end].strip() == marker:
+            return line_end + 1 if line_end < n else n
+        line = line_end + 1
+    return n
+
+
+def _tf_block_end(content: str, start: int) -> int:
+    """Index of the closing brace for a block whose body starts at ``start``."""
+    depth = 1
+    i = start if isinstance(start, int) else 0
+    n = len(content)
+    while i < n and depth:
+        ch = content[i]
+        if ch == "#":
+            nl = content.find("\n", i)
+            i = n if nl < 0 else nl + 1
+            continue
+        if ch == "/" and i + 1 < n and content[i + 1] == "/":
+            nl = content.find("\n", i)
+            i = n if nl < 0 else nl + 1
+            continue
+        if ch == "/" and i + 1 < n and content[i + 1] == "*":
+            end = content.find("*/", i + 2)
+            i = n if end < 0 else end + 2
+            continue
+        if content.startswith("<<", i):
+            i = _tf_skip_heredoc(content, i)
+            continue
+        if ch in {'"', "'"}:
+            quote = ch
+            i += 1
+            while i < n:
+                if content[i] == "\\" and quote == '"':
+                    i += 2
+                    continue
+                if content[i] == quote:
+                    i += 1
+                    break
+                i += 1
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return n
 
 
 # ---------------------------------------------------------------------------
@@ -451,16 +566,27 @@ def from_python_imports(path: str = ".", *, depth: int | None = None) -> list[tu
         files = glob.glob(os.path.join(path, "**/*.py"), recursive=True)
         base = os.path.abspath(path)
 
-    # Build set of local module names from file paths
+    # Build set of local module names from file paths.
+    # A directory scan rooted on a package (it contains ``__init__.py``)
+    # names that file after the directory and prefixes siblings, so
+    # ``from .core`` resolves to ``<pkg>.core``.
+    pkg_root = ""
+    if os.path.isdir(path) and os.path.isfile(os.path.join(base, "__init__.py")):
+        pkg_root = os.path.basename(base.rstrip(os.sep))
     local_modules: set[str] = set()
     file_to_module: dict[str, str] = {}
     for f in files:
         rel = os.path.relpath(f, base).replace(os.sep, "/")
-        # Convert path to module name
-        if rel.endswith("/__init__.py"):
+        if rel == "__init__.py" and pkg_root:
+            mod = pkg_root
+        elif rel.endswith("/__init__.py"):
             mod = rel[:-12].replace("/", ".")
+            if pkg_root:
+                mod = f"{pkg_root}.{mod}" if mod else pkg_root
         elif rel.endswith(".py"):
             mod = rel[:-3].replace("/", ".")
+            if pkg_root:
+                mod = f"{pkg_root}.{mod}"
         else:
             continue
         # Skip hidden/test/venv directories
@@ -1116,13 +1242,22 @@ def _python_resource_graph(
     return _dedupe(edges)
 
 
+def _is_construct_class(func: ast.expr) -> bool:
+    """Resource classes are PascalCase. ``path.join`` and ``get_ami`` are not."""
+    if isinstance(func, ast.Name):
+        return func.id[:1].isupper()
+    if isinstance(func, ast.Attribute):
+        return func.attr[:1].isupper()
+    return False
+
+
 def _looks_like_cdk_call(call: ast.Call) -> bool:
     """Heuristic: AWS CDK constructs are called with `(scope, id, **kwargs)`.
 
-    Match `Module.Class(self, "...", ...)` or `aws_xxx.Klass(scope, "...", ...)`
-    where the second arg is a string (the construct id).
+    The callee may be ``aws_lambda.Function`` or a bare name imported as
+    ``from backend.api import API``. The construct id is a string literal.
     """
-    if not isinstance(call.func, ast.Attribute):
+    if not _is_construct_class(call.func):
         return False
     if len(call.args) < 2:
         return False
@@ -1130,18 +1265,25 @@ def _looks_like_cdk_call(call: ast.Call) -> bool:
     return isinstance(second, ast.Constant) and isinstance(second.value, str)
 
 
-def _looks_like_pulumi_call(call: ast.Call) -> bool:
-    """Heuristic: Pulumi resources are called with `("name", **kwargs)`.
+def _pulumi_name_arg(expr: ast.expr) -> bool:
+    """A Pulumi resource name: a literal, an f-string, or a variable."""
+    if isinstance(expr, ast.Constant):
+        return isinstance(expr.value, str)
+    return isinstance(expr, (ast.JoinedStr, ast.Name))
 
-    Match `Module.Class("name", ...)` or `aws.s3.Bucket("name", ...)` where
-    the FIRST positional arg is a string literal.
+
+def _looks_like_pulumi_call(call: ast.Call) -> bool:
+    """Heuristic: Pulumi resources are called with `(name, **kwargs)`.
+
+    ``aws.s3.Bucket("web")``, ``aws.s3.Bucket(f"web-{i}")``, and
+    ``s3.BucketObject(filename, bucket=bucket.id)`` all count. The name is
+    the first positional argument.
     """
-    if not isinstance(call.func, ast.Attribute):
+    if not _is_construct_class(call.func) or not isinstance(call.func, ast.Attribute):
         return False
     if not call.args:
         return False
-    first = call.args[0]
-    return isinstance(first, ast.Constant) and isinstance(first.value, str)
+    return _pulumi_name_arg(call.args[0])
 
 
 # ---------------------------------------------------------------------------
@@ -1158,13 +1300,14 @@ def from_otel_traces(path: str) -> list[tuple[str, str]]:
     - **Jaeger**: `{"data": [{"spans": [...], "processes": {...}}]}`
       (`jaeger-query` HTTP API and `jaeger-cli`), or one trace object
       with ``spans`` and ``processes`` and no ``data`` wrapper.
-    - **Zipkin**: `[{traceId, id, parentId, localEndpoint: {serviceName}}, ...]`
-      (Zipkin v2 JSON API.)
+    - **Zipkin**: a JSON array of spans, or one span object, each with
+      ``traceId`` and ``localEndpoint.serviceName`` (Zipkin v2).
 
-    Edges are emitted at the **service** level, not the span level: a parent
-    span owned by service A and a child span owned by service B produce a
-    single edge ``A -> B``. Same-service spans (intra-process) are dropped,
-    as are self-loops.
+    Edges are service-level. A parent span in service A with a child in
+    service B produces ``A -> B``. A span's ``remoteEndpoint`` is the other
+    side of that call: a client/producer span points at the remote service,
+    and a server/consumer span is pointed at by the remote service.
+    Same-service spans and self-loops are dropped.
 
     Args:
         path: Path to the trace JSON file.
@@ -1188,14 +1331,26 @@ def from_otel_traces(path: str) -> list[tuple[str, str]]:
     # One Jaeger trace object, the element `data` normally wraps.
     if isinstance(data, dict) and "spans" in data and "processes" in data:
         return _dedupe(_otel_from_jaeger({"data": [data]}))
-    if isinstance(data, list) and data and isinstance(data[0], dict) and "traceId" in data[0]:
-        return _dedupe(_otel_from_zipkin(data))
+    zipkin = _zipkin_spans(data)
+    if zipkin is not None:
+        return _dedupe(_otel_from_zipkin(zipkin))
 
     raise ValueError(
         "Trace file format not recognized. Expected OTLP "
         "(`resourceSpans`), Jaeger (`data: [{spans, processes}]`), or "
-        "Zipkin (top-level array with `traceId`/`localEndpoint`)."
+        "Zipkin (one span or an array of spans with `traceId`/`localEndpoint`)."
     )
+
+
+def _zipkin_spans(data: Any) -> list | None:
+    """Zipkin v2 is either a list of spans or one span object."""
+    if isinstance(data, list) and data and isinstance(data[0], dict) and "traceId" in data[0]:
+        return data
+    if isinstance(data, dict) and "traceId" in data and (
+        "id" in data or "localEndpoint" in data
+    ):
+        return [data]
+    return None
 
 
 def _otel_from_otlp(data: dict) -> list[tuple[str, str]]:
@@ -1274,7 +1429,7 @@ def _otel_from_jaeger(data: dict) -> list[tuple[str, str]]:
 
 
 def _otel_from_zipkin(spans: list) -> list[tuple[str, str]]:
-    """Parse Zipkin v2 JSON: flat list of {id, parentId, localEndpoint.serviceName}."""
+    """Parse Zipkin v2 spans: parent/child links and ``remoteEndpoint`` calls."""
     span_to_service: dict[str, str] = {}
     for span in spans:
         sid = span.get("id")
@@ -1285,6 +1440,15 @@ def _otel_from_zipkin(spans: list) -> list[tuple[str, str]]:
 
     edges: list[tuple[str, str]] = []
     for span in spans:
+        local = (span.get("localEndpoint") or {}).get("serviceName")
+        remote = (span.get("remoteEndpoint") or {}).get("serviceName")
+        if isinstance(local, str) and isinstance(remote, str) and local != remote:
+            kind = str(span.get("kind") or "").upper()
+            # SERVER/CONSUMER spans are the callee; the remote side is the caller.
+            if kind in {"SERVER", "CONSUMER"}:
+                edges.append((remote, local))
+            else:
+                edges.append((local, remote))
         sid = span.get("id")
         pid = span.get("parentId")
         if not sid or not pid:
@@ -1436,6 +1600,32 @@ def _lg_annotation_targets(ann: ast.expr | None) -> list[str]:
     return _lg_type_targets(ann.slice)
 
 
+def _lg_router_targets(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
+    """Static branch targets of a conditional-edge router.
+
+    Uses the return annotation (``Literal["a", "b"]``, including a stringized
+    annotation) and ``return "node"`` / ``return END`` constants. A returned
+    variable is dynamic and contributes nothing.
+    """
+    ann: ast.expr | None = fn.returns
+    if isinstance(ann, ast.Constant) and isinstance(ann.value, str):
+        try:
+            parsed = ast.parse(ann.value, mode="eval").body
+        except SyntaxError:
+            parsed = None
+        ann = parsed if isinstance(parsed, ast.expr) else None
+    found = list(_lg_type_targets(ann))
+    stack: list[ast.AST] = list(reversed(fn.body))
+    while stack:
+        current = stack.pop()
+        if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            continue
+        if isinstance(current, ast.Return) and current.value is not None:
+            found.extend(_lg_targets(current.value))
+        stack.extend(reversed(list(ast.iter_child_nodes(current))))
+    return found
+
+
 def _lg_type_targets(expr: ast.expr | None) -> list[str]:
     """Targets inside ``Literal[...]``, a union of those, or a bare literal list."""
     if expr is None:
@@ -1570,6 +1760,7 @@ def from_langgraph(path: str) -> list[tuple[str, str]]:
         ):
             mounted[action.func.value.id] = (owner, node_name)
 
+    functions = _node_functions(tree)
     for node in _preorder(tree):
         if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
             continue
@@ -1601,6 +1792,13 @@ def from_langgraph(path: str) -> list[tuple[str, str]]:
             elif isinstance(mapping_node, (ast.List, ast.Tuple)):
                 for target in _lg_path_targets(mapping_node):
                     raw.append((owner, src, target))
+            elif mapping_node is None and len(node.args) >= 2 and isinstance(node.args[1], ast.Name):
+                # No path_map: the router's Literal annotation and returned
+                # string constants are the static targets.
+                router = functions.get(node.args[1].id)
+                if router is not None:
+                    for target in _lg_router_targets(router):
+                        raw.append((owner, src, target))
 
         elif method == "set_entry_point" and node.args:
             t = _lg_norm(_ast_str_arg(node.args[0]))
@@ -1631,7 +1829,7 @@ def from_langgraph(path: str) -> list[tuple[str, str]]:
                 _mount_target(action if action is not None else first, owner, first.id)
 
     # 3. Command(goto=...) and Command[Literal[...]] on the node functions themselves.
-    for fdef in _node_functions(tree).values():
+    for fdef in functions.values():
         if fdef.name not in func_to_nodes:
             continue
         targets = list(_lg_annotation_targets(fdef.returns))

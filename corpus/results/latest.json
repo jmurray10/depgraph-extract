@@ -20,7 +20,7 @@
       "source": "kubernetes",
       "parser": "kubernetes",
       "path": "kubernetes-manifests/frontend.yaml",
-      "edges": 1,
+      "edges": 2,
       "deterministic": true,
       "labeled": true,
       "precision": 1.0,
@@ -305,25 +305,12 @@
       "source": "kubernetes",
       "parser": "kubernetes",
       "path": "guestbook",
-      "edges": 0,
+      "edges": 3,
       "deterministic": true,
       "labeled": true,
-      "precision": 0.0,
-      "recall": 0.0,
-      "missing": [
-        [
-          "frontend",
-          "frontend"
-        ],
-        [
-          "redis-master",
-          "redis-master"
-        ],
-        [
-          "redis-replica",
-          "redis-replica"
-        ]
-      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "missing": [],
       "extra": [],
       "split": "held-out",
       "sha": "209452cc17f0632f06fa0a1f79060884b8277968"
@@ -333,18 +320,13 @@
       "source": "terraform",
       "parser": "terraform",
       "path": "examples/object",
-      "edges": 1,
+      "edges": 11,
       "deterministic": true,
       "labeled": true,
-      "precision": 0.0,
+      "precision": 1.0,
       "recall": 1.0,
       "missing": [],
-      "extra": [
-        [
-          "aws_kms_key.this",
-          "random_pet.this"
-        ]
-      ],
+      "extra": [],
       "split": "held-out",
       "sha": "3bdca54ebfca919bb473fa1e0a7a03f98bd210ff"
     },
@@ -368,21 +350,12 @@
       "source": "aws-cdk",
       "parser": "aws-cdk",
       "path": "backend/component.py",
-      "edges": 0,
+      "edges": 2,
       "deterministic": true,
       "labeled": true,
-      "precision": 0.0,
-      "recall": 0.0,
-      "missing": [
-        [
-          "api",
-          "database"
-        ],
-        [
-          "database",
-          "api"
-        ]
-      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "missing": [],
       "extra": [],
       "split": "held-out",
       "sha": "f78bdc2ef678af22b42be8b21250ba5095040028"
@@ -392,17 +365,12 @@
       "source": "pulumi",
       "parser": "pulumi",
       "path": "aws-py-s3-folder/__main__.py",
-      "edges": 3,
+      "edges": 4,
       "deterministic": true,
       "labeled": true,
       "precision": 1.0,
-      "recall": 0.75,
-      "missing": [
-        [
-          "obj",
-          "web_bucket"
-        ]
-      ],
+      "recall": 1.0,
+      "missing": [],
       "extra": [],
       "split": "held-out",
       "sha": "b2a63a2a9f640882d06f201e26049104e0af3326"
@@ -487,65 +455,12 @@
       "source": "langgraph",
       "parser": "langgraph",
       "path": "eaia/main/graph.py",
-      "edges": 11,
+      "edges": 24,
       "deterministic": true,
       "labeled": true,
       "precision": 1.0,
-      "recall": 0.4583333333333333,
-      "missing": [
-        [
-          "draft_response",
-          "bad_tool_name"
-        ],
-        [
-          "draft_response",
-          "find_meeting_time"
-        ],
-        [
-          "draft_response",
-          "mark_as_read_node"
-        ],
-        [
-          "draft_response",
-          "rewrite"
-        ],
-        [
-          "draft_response",
-          "send_cal_invite"
-        ],
-        [
-          "draft_response",
-          "send_message"
-        ],
-        [
-          "human_node",
-          "draft_response"
-        ],
-        [
-          "human_node",
-          "mark_as_read_node"
-        ],
-        [
-          "human_node",
-          "send_cal_invite_node"
-        ],
-        [
-          "human_node",
-          "send_email_node"
-        ],
-        [
-          "triage_input",
-          "draft_response"
-        ],
-        [
-          "triage_input",
-          "mark_as_read_node"
-        ],
-        [
-          "triage_input",
-          "notify"
-        ]
-      ],
+      "recall": 1.0,
+      "missing": [],
       "extra": [],
       "split": "held-out",
       "sha": "fb2d125591115bbc1864ea47ee37b9525681122e"
@@ -600,12 +515,60 @@
       "source": "otel-traces",
       "parser": "otel-traces",
       "path": "benchmarks/src/test/resources/zipkin2-client.json",
-      "edges": 0,
-      "deterministic": false,
-      "labeled": false,
-      "error": "ValueError: Trace file format not recognized. Expected OTLP (`resourceSpans`), Jaeger (`data: [{spans, processes}]`), or Zipkin (top-level array with `traceId`/`localEndpoint`).",
+      "edges": 1,
+      "deterministic": true,
+      "labeled": true,
+      "precision": 1.0,
+      "recall": 1.0,
+      "missing": [],
+      "extra": [],
       "split": "held-out",
       "sha": "a36e0577ddd83683fb70538b563ba2bf872f677d"
+    },
+    {
+      "id": "k8s-podinfo",
+      "source": "kubernetes",
+      "parser": "kubernetes",
+      "path": "kustomize",
+      "edges": 1,
+      "deterministic": true,
+      "labeled": true,
+      "precision": 1.0,
+      "recall": 1.0,
+      "missing": [],
+      "extra": [],
+      "split": "held-out",
+      "sha": "fd3a834ed8d14b80ea334cf8a2fddd4597924da6"
+    },
+    {
+      "id": "tf-dynamodb-basic",
+      "source": "terraform",
+      "parser": "terraform",
+      "path": "examples/basic",
+      "edges": 1,
+      "deterministic": true,
+      "labeled": true,
+      "precision": 1.0,
+      "recall": 1.0,
+      "missing": [],
+      "extra": [],
+      "split": "held-out",
+      "sha": "b6cc515760466a455ff0acb97b16151fdca4511e"
+    },
+    {
+      "id": "lg-react-agent",
+      "source": "langgraph",
+      "parser": "langgraph",
+      "path": "src/react_agent/graph.py",
+      "edges": 4,
+      "deterministic": true,
+      "labeled": true,
+      "precision": 1.0,
+      "recall": 1.0,
+      "missing": [],
+      "extra": [],
+      "split": "held-out",
+      "sha": "9e516c6d8d4f2025949ad9279c4af147eab0683e"
     }
   ],
   "drift": [
@@ -629,8 +592,8 @@
       "split": "tuning",
       "pin_sha": "7cfba453a014340f66c4b4963adfc0718858fd91",
       "head_sha": "c7cb6d5bfd6ea3aed768634ebbcb98cb7a523712",
-      "pin_edges": 1,
-      "head_edges": 1,
+      "pin_edges": 2,
+      "head_edges": 2,
       "delta": 0,
       "pin_precision": 1.0,
       "pin_recall": 1.0,
@@ -887,11 +850,11 @@
       "split": "held-out",
       "pin_sha": "209452cc17f0632f06fa0a1f79060884b8277968",
       "head_sha": "22934a040acbb0c0aa103023ccbd871507bf17f6",
-      "pin_edges": 0,
+      "pin_edges": 3,
       "head_edges": 0,
-      "delta": 0,
-      "pin_precision": 0.0,
-      "pin_recall": 0.0,
+      "delta": -3,
+      "pin_precision": 1.0,
+      "pin_recall": 1.0,
       "head_precision": null,
       "head_recall": null
     },
@@ -901,13 +864,13 @@
       "split": "held-out",
       "pin_sha": "3bdca54ebfca919bb473fa1e0a7a03f98bd210ff",
       "head_sha": "9afa4fc8c8f1e0b3fd913474c1bef8d0c454b235",
-      "pin_edges": 1,
-      "head_edges": 0,
-      "delta": -1,
-      "pin_precision": 0.0,
+      "pin_edges": 11,
+      "head_edges": 6,
+      "delta": -5,
+      "pin_precision": 1.0,
       "pin_recall": 1.0,
-      "head_precision": 1.0,
-      "head_recall": 1.0
+      "head_precision": 0.6666666666666666,
+      "head_recall": 0.36363636363636365
     },
     {
       "id": "cfn-lambda-sample",
@@ -939,13 +902,13 @@
       "split": "held-out",
       "pin_sha": "b2a63a2a9f640882d06f201e26049104e0af3326",
       "head_sha": "11808adad740540899dd0d1ce2de86ab46c94825",
-      "pin_edges": 3,
-      "head_edges": 3,
+      "pin_edges": 4,
+      "head_edges": 4,
       "delta": 0,
       "pin_precision": 1.0,
-      "pin_recall": 0.75,
+      "pin_recall": 1.0,
       "head_precision": 1.0,
-      "head_recall": 0.75
+      "head_recall": 1.0
     },
     {
       "id": "gha-click-tests",
@@ -1051,13 +1014,13 @@
       "split": "held-out",
       "pin_sha": "fb2d125591115bbc1864ea47ee37b9525681122e",
       "head_sha": "758db7174223da7864feea7c9f8d1aba12923037",
-      "pin_edges": 11,
-      "head_edges": 11,
+      "pin_edges": 24,
+      "head_edges": 24,
       "delta": 0,
       "pin_precision": 1.0,
-      "pin_recall": 0.4583333333333333,
+      "pin_recall": 1.0,
       "head_precision": 1.0,
-      "head_recall": 0.4583333333333333
+      "head_recall": 1.0
     },
     {
       "id": "crew-marketing",
@@ -1079,13 +1042,43 @@
       "split": "held-out",
       "pin_sha": "a36e0577ddd83683fb70538b563ba2bf872f677d",
       "head_sha": "878ce2a1fad54ca941d17fdcf2e1d924b148eb1f",
-      "pin_edges": 0,
-      "head_edges": 0,
+      "pin_edges": 1,
+      "head_edges": 1,
       "delta": 0,
-      "pin_precision": null,
-      "pin_recall": null,
-      "head_precision": null,
-      "head_recall": null
+      "pin_precision": 1.0,
+      "pin_recall": 1.0,
+      "head_precision": 1.0,
+      "head_recall": 1.0
+    },
+    {
+      "id": "k8s-podinfo",
+      "repo": "podinfo",
+      "pin_sha": "fd3a834ed8d14b80ea334cf8a2fddd4597924da6",
+      "head_sha": "fd3a834ed8d14b80ea334cf8a2fddd4597924da6",
+      "pin_edges": null,
+      "head_edges": null,
+      "delta": 0,
+      "note": "pin is HEAD"
+    },
+    {
+      "id": "tf-dynamodb-basic",
+      "repo": "tf-dynamodb",
+      "pin_sha": "b6cc515760466a455ff0acb97b16151fdca4511e",
+      "head_sha": "b6cc515760466a455ff0acb97b16151fdca4511e",
+      "pin_edges": null,
+      "head_edges": null,
+      "delta": 0,
+      "note": "pin is HEAD"
+    },
+    {
+      "id": "lg-react-agent",
+      "repo": "react-agent",
+      "pin_sha": "9e516c6d8d4f2025949ad9279c4af147eab0683e",
+      "head_sha": "9e516c6d8d4f2025949ad9279c4af147eab0683e",
+      "pin_edges": null,
+      "head_edges": null,
+      "delta": 0,
+      "note": "pin is HEAD"
     }
   ]
 }

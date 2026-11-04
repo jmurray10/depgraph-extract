@@ -283,6 +283,36 @@
       "sparse": [
         "benchmarks/src/test/resources/zipkin2-client.json"
       ]
+    },
+    {
+      "id": "podinfo",
+      "split": "held-out",
+      "url": "https://github.com/stefanprodan/podinfo.git",
+      "sha": "fd3a834ed8d14b80ea334cf8a2fddd4597924da6",
+      "head": "fd3a834ed8d14b80ea334cf8a2fddd4597924da6",
+      "sparse": [
+        "kustomize"
+      ]
+    },
+    {
+      "id": "tf-dynamodb",
+      "split": "held-out",
+      "url": "https://github.com/terraform-aws-modules/terraform-aws-dynamodb-table.git",
+      "sha": "b6cc515760466a455ff0acb97b16151fdca4511e",
+      "head": "b6cc515760466a455ff0acb97b16151fdca4511e",
+      "sparse": [
+        "examples/basic"
+      ]
+    },
+    {
+      "id": "react-agent",
+      "split": "held-out",
+      "url": "https://github.com/langchain-ai/react-agent.git",
+      "sha": "9e516c6d8d4f2025949ad9279c4af147eab0683e",
+      "head": "9e516c6d8d4f2025949ad9279c4af147eab0683e",
+      "sparse": [
+        "src/react_agent/graph.py"
+      ]
     }
   ],
   "cases": [
@@ -565,6 +595,30 @@
       "parser": "otel-traces",
       "path": "benchmarks/src/test/resources/zipkin2-client.json",
       "label": "otel-zipkin-client.json"
+    },
+    {
+      "id": "k8s-podinfo",
+      "repo": "podinfo",
+      "source": "kubernetes",
+      "parser": "kubernetes",
+      "path": "kustomize",
+      "label": "k8s-podinfo.json"
+    },
+    {
+      "id": "tf-dynamodb-basic",
+      "repo": "tf-dynamodb",
+      "source": "terraform",
+      "parser": "terraform",
+      "path": "examples/basic",
+      "label": "tf-dynamodb-basic.json"
+    },
+    {
+      "id": "lg-react-agent",
+      "repo": "react-agent",
+      "source": "langgraph",
+      "parser": "langgraph",
+      "path": "src/react_agent/graph.py",
+      "label": "lg-react-agent.json"
     }
   ]
 }

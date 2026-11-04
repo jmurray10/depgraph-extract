@@ -139,6 +139,150 @@ def test_from_directory_finds_nested_compose(tmp_path):
     assert sources.get("docker-compose") == 1
 
 
+def test_kubernetes_same_name_service_and_deployment_keeps_kind(tmp_path):
+    (tmp_path / "guestbook.yaml").write_text(textwrap.dedent("""\
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: frontend
+        spec:
+          selector:
+            app: guestbook
+        ---
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: frontend
+        spec:
+          template:
+            metadata:
+              labels:
+                app: guestbook
+    """))
+    edges = set(extract.from_kubernetes(str(tmp_path)))
+    assert ("Service/frontend", "Deployment/frontend") in edges
+
+
+def test_terraform_module_refs_stay_inside_their_block(tmp_path):
+    (tmp_path / "main.tf").write_text(textwrap.dedent("""\
+        resource "aws_kms_key" "this" {
+          description = "key"
+        }
+        resource "random_pet" "this" {
+          length = 2
+        }
+        module "bucket" {
+          source = "../../"
+          bucket = random_pet.this.id
+          kms_key_id = aws_kms_key.this.arn
+        }
+    """))
+    edges = set(extract.from_terraform(str(tmp_path)))
+    assert ("aws_kms_key.this", "random_pet.this") not in edges
+    assert ("bucket", "random_pet.this") in edges
+    assert ("bucket", "aws_kms_key.this") in edges
+
+
+def test_terraform_heredoc_braces_do_not_end_the_block(tmp_path):
+    (tmp_path / "main.tf").write_text(textwrap.dedent("""\
+        resource "random_pet" "name" {
+          length = 2
+        }
+        module "table" {
+          source = "../../"
+          name   = "t-${random_pet.name.id}"
+          policy = <<POLICY
+        { "Statement": [] }
+        POLICY
+        }
+        resource "aws_iam_role" "extra" {
+          name = random_pet.name.id
+        }
+    """))
+    edges = set(extract.from_terraform(str(tmp_path)))
+    assert ("table", "name") in edges
+    assert ("extra", "name") in edges
+
+
+def test_zipkin_single_object_uses_remote_endpoint(tmp_path):
+    path = tmp_path / "span.json"
+    path.write_text(
+        '{"traceId":"abc","id":"child","parentId":"missing","kind":"CLIENT",'
+        '"localEndpoint":{"serviceName":"frontend"},'
+        '"remoteEndpoint":{"serviceName":"backend"}}'
+    )
+    assert extract.from_otel_traces(str(path)) == [("frontend", "backend")]
+    path.write_text(
+        '{"traceId":"abc","id":"s","kind":"SERVER",'
+        '"localEndpoint":{"serviceName":"backend"},'
+        '"remoteEndpoint":{"serviceName":"frontend"}}'
+    )
+    assert extract.from_otel_traces(str(path)) == [("frontend", "backend")]
+
+
+def test_langgraph_conditional_edges_without_path_map(tmp_path):
+    path = tmp_path / "g.py"
+    path.write_text(textwrap.dedent('''\
+        from typing import Literal
+        from langgraph.graph import StateGraph, START, END
+        def route(state) -> Literal["draft", "notify"]:
+            if state:
+                return "draft"
+            return "notify"
+        g = StateGraph(dict)
+        g.add_node("triage", lambda s: s)
+        g.add_node("draft", lambda s: s)
+        g.set_entry_point("triage")
+        g.add_conditional_edges("triage", route)
+        g.add_edge("notify", END)
+    '''))
+    edges = set(extract.from_langgraph(str(path)))
+    assert ("triage", "draft") in edges
+    assert ("triage", "notify") in edges
+    assert ("START", "triage") in edges
+
+
+def test_cdk_bare_imported_construct_call(tmp_path):
+    path = tmp_path / "app.py"
+    path.write_text(textwrap.dedent("""\
+        from backend.database import Database
+        from backend.api import API
+        database = Database(self, "Database", billing="on_demand")
+        api = API(self, "API", table=database.table)
+        database.table.grant_read_write_data(api.function)
+    """))
+    edges = set(extract.from_aws_cdk(str(path)))
+    assert ("api", "database") in edges
+    assert ("database", "api") in edges
+
+
+def test_pulumi_loop_variable_resource_name(tmp_path):
+    path = tmp_path / "main.py"
+    path.write_text(textwrap.dedent("""\
+        import pulumi_aws as aws
+        bucket = aws.s3.Bucket("web")
+        for filename in files:
+            obj = aws.s3.BucketObject(filename, bucket=bucket.id)
+        named = aws.s3.BucketObject(f"web-{suffix}", bucket=bucket.id)
+    """))
+    edges = set(extract.from_pulumi(str(path)))
+    assert ("obj", "bucket") in edges
+    assert ("named", "bucket") in edges
+    # Helper calls are not resources, so their variables are not nodes.
+    assert not any(node == "filepath" or node == "filename" for edge in edges for node in edge)
+
+
+def test_python_imports_package_root_init(tmp_path):
+    pkg = tmp_path / "click"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("from .core import Command\n")
+    (pkg / "core.py").write_text("from .utils import echo\n")
+    (pkg / "utils.py").write_text("VALUE = 1\n")
+    edges = {tuple(e) for e in extract.from_python_imports(str(pkg))}
+    assert ("click", "core") in edges
+    assert ("core", "utils") in edges
+
+
 def test_quickstart_compose_has_five_services():
     compose = Path(__file__).resolve().parents[1] / "examples" / "docker-compose.yml"
     text = compose.read_text()

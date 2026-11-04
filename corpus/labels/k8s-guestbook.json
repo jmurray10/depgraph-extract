@@ -1,16 +1,7 @@
 {
   "edges": [
-    [
-      "frontend",
-      "frontend"
-    ],
-    [
-      "redis-master",
-      "redis-master"
-    ],
-    [
-      "redis-replica",
-      "redis-replica"
-    ]
+    ["Service/frontend", "Deployment/frontend"],
+    ["Service/redis-master", "Deployment/redis-master"],
+    ["Service/redis-replica", "Deployment/redis-replica"]
   ]
 }

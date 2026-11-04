@@ -1,8 +1,6 @@
 {
   "edges": [
-    [
-      "frontend-external",
-      "frontend"
-    ]
+    ["frontend-external", "Deployment/frontend"],
+    ["Service/frontend", "Deployment/frontend"]
   ]
 }
