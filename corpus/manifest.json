@@ -1,0 +1,570 @@
+{
+  "described_on": "2026-11-04",
+  "repos": [
+    {
+      "id": "awesome-compose",
+      "split": "tuning",
+      "url": "https://github.com/docker/awesome-compose.git",
+      "sha": "18f59bdb09ecf520dd5758fbf90dec314baec545",
+      "head": "30f4b7f6a6c3b0c0ecf4d4efb0de203c48d11562",
+      "sparse": [
+        "nginx-golang-mysql"
+      ]
+    },
+    {
+      "id": "online-boutique",
+      "split": "tuning",
+      "url": "https://github.com/GoogleCloudPlatform/microservices-demo.git",
+      "sha": "7cfba453a014340f66c4b4963adfc0718858fd91",
+      "head": "c7cb6d5bfd6ea3aed768634ebbcb98cb7a523712",
+      "sparse": [
+        "kubernetes-manifests"
+      ]
+    },
+    {
+      "id": "tf-vpc",
+      "split": "tuning",
+      "url": "https://github.com/terraform-aws-modules/terraform-aws-vpc.git",
+      "sha": "7c1f791efd61f326ed6102d564d1a65d1eceedf0",
+      "head": "b3abd6df2ecf052451a361ed55b8f06f8742a795",
+      "sparse": [
+        "vpc-flow-logs.tf"
+      ]
+    },
+    {
+      "id": "cfn-templates",
+      "split": "tuning",
+      "url": "https://github.com/aws-cloudformation/aws-cloudformation-templates.git",
+      "sha": "6de5bfef8751f0ba80a4a234262712aa61ed4308",
+      "head": "a0f43bc6d20813052892546f445037cf84c75b54",
+      "sparse": [
+        "EC2/EIP_With_Association.yaml"
+      ]
+    },
+    {
+      "id": "cdk-examples",
+      "split": "tuning",
+      "url": "https://github.com/aws-samples/aws-cdk-examples.git",
+      "sha": "2030881821e0fe987bb51fc3ab2d7b5624e13366",
+      "head": "fe425ac37230d64ff48477e356acd620cdefed32",
+      "sparse": [
+        "python/lambda-cron"
+      ]
+    },
+    {
+      "id": "pulumi-examples",
+      "split": "tuning",
+      "url": "https://github.com/pulumi/examples.git",
+      "sha": "b2a63a2a9f640882d06f201e26049104e0af3326",
+      "head": "11808adad740540899dd0d1ce2de86ab46c94825",
+      "sparse": [
+        "aws-py-webserver"
+      ]
+    },
+    {
+      "id": "flask",
+      "split": "tuning",
+      "url": "https://github.com/pallets/flask.git",
+      "sha": "a42c4d54a3e5cd56c0700479ede75157a748acd6",
+      "head": "49943b5a94413a530761350f04e896f76e8d620e",
+      "sparse": [
+        "src/flask/sansio",
+        "pyproject.toml",
+        ".github/workflows"
+      ]
+    },
+    {
+      "id": "changesets",
+      "split": "tuning",
+      "url": "https://github.com/changesets/changesets.git",
+      "sha": "9ce98a59b595bc328cf6c7f4141f3cd05dd15940",
+      "head": "2f6995d5bbd3b1572d7a6cd897d2229bfc1ce8c1",
+      "sparse": [
+        "package.json",
+        "packages/cli/package.json",
+        "packages/logger/package.json"
+      ]
+    },
+    {
+      "id": "langgraph-new",
+      "split": "tuning",
+      "url": "https://github.com/langchain-ai/new-langgraph-project.git",
+      "sha": "e1e44e151760fe4f903b337a93489ef06dec5086",
+      "head": "f5a2827c0da271dcd73a4280df058a02c8886c83",
+      "sparse": [
+        "src"
+      ]
+    },
+    {
+      "id": "open-deep-research",
+      "split": "tuning",
+      "url": "https://github.com/langchain-ai/open_deep_research.git",
+      "sha": "aff4b5b86ef4fc988e05e8c2669db5158724027f",
+      "head": "1b7d2e80db9faa586165c60e09096dbbfd483a64",
+      "sparse": [
+        "src/open_deep_research/graph.py"
+      ]
+    },
+    {
+      "id": "crew-examples",
+      "split": "tuning",
+      "url": "https://github.com/crewAIInc/crewAI-examples.git",
+      "sha": "7fba976d00bd5cb36a6edd1a77458cdb6112101e",
+      "head": "da94a91e691e1cf5b3151416bb15b5b62729bea8",
+      "sparse": [
+        "stock_analysis/src/stock_analysis/crew.py"
+      ]
+    },
+    {
+      "id": "autogen",
+      "split": "tuning",
+      "url": "https://github.com/microsoft/autogen.git",
+      "sha": "d07c667a3239ea4ab7af62a53b0f4ff205a1f23d",
+      "head": "d07c667a3239ea4ab7af62a53b0f4ff205a1f23d",
+      "sparse": [
+        "python/samples/agentchat_fastapi/app_team.py"
+      ]
+    },
+    {
+      "id": "requests",
+      "split": "tuning",
+      "url": "https://github.com/psf/requests.git",
+      "sha": "a7e1c745dc23c18e836febd672416ed0c5d8d8ae",
+      "head": "3c7baaa05ab4aa49cc819ce3a819d260de19c157",
+      "sparse": [
+        "requirements-dev.txt"
+      ]
+    },
+    {
+      "id": "otel-proto",
+      "split": "tuning",
+      "url": "https://github.com/open-telemetry/opentelemetry-proto.git",
+      "sha": "68f9c6329ca91f96333ee5b240e305945b122b70",
+      "head": "169f2f2c7c1550c364d5eecb05d1b6163a011b06",
+      "sparse": [
+        "examples/trace.json"
+      ]
+    },
+    {
+      "id": "jaeger-ui",
+      "split": "tuning",
+      "url": "https://github.com/jaegertracing/jaeger-ui.git",
+      "sha": "3b43e33030722010ec969c088d98bf733207a417",
+      "head": "7066ae45eee1a5562c01ca5f43552509a654e454",
+      "sparse": [
+        "packages/jaeger-ui/src/components/TracePage/TraceGraph/testTrace.json"
+      ]
+    },
+    {
+      "id": "example-voting-app",
+      "split": "held-out",
+      "url": "https://github.com/dockersamples/example-voting-app.git",
+      "sha": "63e9150ca17af4ed05880d4245e486481f73fcb4",
+      "head": "63e9150ca17af4ed05880d4245e486481f73fcb4",
+      "sparse": [
+        "docker-compose.yml",
+        "k8s-specifications"
+      ]
+    },
+    {
+      "id": "k8s-examples",
+      "split": "held-out",
+      "url": "https://github.com/kubernetes/examples.git",
+      "sha": "209452cc17f0632f06fa0a1f79060884b8277968",
+      "head": "22934a040acbb0c0aa103023ccbd871507bf17f6",
+      "sparse": [
+        "guestbook"
+      ]
+    },
+    {
+      "id": "tf-s3",
+      "split": "held-out",
+      "url": "https://github.com/terraform-aws-modules/terraform-aws-s3-bucket.git",
+      "sha": "3bdca54ebfca919bb473fa1e0a7a03f98bd210ff",
+      "head": "9afa4fc8c8f1e0b3fd913474c1bef8d0c454b235",
+      "sparse": [
+        "examples/object"
+      ]
+    },
+    {
+      "id": "cfn-lambda",
+      "split": "held-out",
+      "url": "https://github.com/aws-cloudformation/aws-cloudformation-templates.git",
+      "sha": "6de5bfef8751f0ba80a4a234262712aa61ed4308",
+      "head": "a0f43bc6d20813052892546f445037cf84c75b54",
+      "sparse": [
+        "Lambda"
+      ]
+    },
+    {
+      "id": "cdk-structure",
+      "split": "held-out",
+      "url": "https://github.com/aws-samples/aws-cdk-project-structure-python.git",
+      "sha": "f78bdc2ef678af22b42be8b21250ba5095040028",
+      "head": "f78bdc2ef678af22b42be8b21250ba5095040028",
+      "sparse": [
+        "app.py",
+        "backend",
+        "toolchain.py",
+        "requirements.txt"
+      ]
+    },
+    {
+      "id": "pulumi-s3",
+      "split": "held-out",
+      "url": "https://github.com/pulumi/examples.git",
+      "sha": "b2a63a2a9f640882d06f201e26049104e0af3326",
+      "head": "11808adad740540899dd0d1ce2de86ab46c94825",
+      "sparse": [
+        "aws-py-s3-folder"
+      ]
+    },
+    {
+      "id": "click",
+      "split": "held-out",
+      "url": "https://github.com/pallets/click.git",
+      "sha": "60b9c0e88f299dfdbe395e168f3fa146f494d50e",
+      "head": "2247b35ea1c47c727d7a06e51fa280e12a863ff6",
+      "sparse": [
+        "src/click",
+        "pyproject.toml",
+        ".github/workflows/tests.yaml"
+      ]
+    },
+    {
+      "id": "lerna",
+      "split": "held-out",
+      "url": "https://github.com/lerna/lerna.git",
+      "sha": "9205c2b7ac86840e8c9bc8ac628ca711a3ae0bcc",
+      "head": "d6226111673016062ba099b2876334069407ef41",
+      "sparse": [
+        "package.json",
+        "packages"
+      ]
+    },
+    {
+      "id": "executive-assistant",
+      "split": "held-out",
+      "url": "https://github.com/langchain-ai/executive-ai-assistant.git",
+      "sha": "fb2d125591115bbc1864ea47ee37b9525681122e",
+      "head": "758db7174223da7864feea7c9f8d1aba12923037",
+      "sparse": [
+        "eaia"
+      ]
+    },
+    {
+      "id": "crew-marketing",
+      "split": "held-out",
+      "url": "https://github.com/crewAIInc/crewAI-examples.git",
+      "sha": "7fba976d00bd5cb36a6edd1a77458cdb6112101e",
+      "head": "da94a91e691e1cf5b3151416bb15b5b62729bea8",
+      "sparse": [
+        "marketing_strategy"
+      ]
+    },
+    {
+      "id": "httpx",
+      "split": "held-out",
+      "url": "https://github.com/encode/httpx.git",
+      "sha": "6c7af967734bafd011164f2a1653abc87905a62b",
+      "head": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254",
+      "sparse": [
+        "pyproject.toml",
+        "requirements.txt",
+        "httpx"
+      ]
+    },
+    {
+      "id": "zipkin",
+      "split": "held-out",
+      "url": "https://github.com/openzipkin/zipkin.git",
+      "sha": "a36e0577ddd83683fb70538b563ba2bf872f677d",
+      "head": "878ce2a1fad54ca941d17fdcf2e1d924b148eb1f",
+      "sparse": [
+        "benchmarks/src/test/resources/zipkin2-client.json"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "compose-nginx-golang-mysql",
+      "repo": "awesome-compose",
+      "source": "docker-compose",
+      "parser": "docker-compose",
+      "path": "nginx-golang-mysql/compose.yaml",
+      "label": "compose-nginx-golang-mysql.json"
+    },
+    {
+      "id": "k8s-boutique-frontend",
+      "repo": "online-boutique",
+      "source": "kubernetes",
+      "parser": "kubernetes",
+      "path": "kubernetes-manifests/frontend.yaml",
+      "label": "k8s-boutique-frontend.json"
+    },
+    {
+      "id": "tf-vpc-flow-logs",
+      "repo": "tf-vpc",
+      "source": "terraform",
+      "parser": "terraform",
+      "path": "vpc-flow-logs.tf",
+      "label": "tf-vpc-flow-logs.json"
+    },
+    {
+      "id": "cfn-eip-association",
+      "repo": "cfn-templates",
+      "source": "cloudformation",
+      "parser": "cloudformation",
+      "path": "EC2/EIP_With_Association.yaml",
+      "label": "cfn-eip-association.json"
+    },
+    {
+      "id": "cdk-lambda-cron",
+      "repo": "cdk-examples",
+      "source": "aws-cdk",
+      "parser": "aws-cdk",
+      "path": "python/lambda-cron/app.py",
+      "label": "cdk-lambda-cron.json"
+    },
+    {
+      "id": "pulumi-webserver",
+      "repo": "pulumi-examples",
+      "source": "pulumi",
+      "parser": "pulumi",
+      "path": "aws-py-webserver/__main__.py",
+      "label": "pulumi-webserver.json"
+    },
+    {
+      "id": "gha-flask-tests",
+      "repo": "flask",
+      "source": "github-actions",
+      "parser": "github-actions",
+      "path": ".github/workflows/tests.yaml",
+      "label": "gha-flask-tests.json"
+    },
+    {
+      "id": "py-flask-sansio",
+      "repo": "flask",
+      "source": "python-imports",
+      "parser": "python-imports",
+      "path": "src/flask/sansio",
+      "label": "py-flask-sansio.json"
+    },
+    {
+      "id": "pyproject-flask",
+      "repo": "flask",
+      "source": "pyproject",
+      "parser": "pyproject",
+      "path": "pyproject.toml",
+      "label": "pyproject-flask.json"
+    },
+    {
+      "id": "req-requests",
+      "repo": "requests",
+      "source": "requirements",
+      "parser": "requirements",
+      "path": "requirements-dev.txt",
+      "label": "req-requests.json"
+    },
+    {
+      "id": "req-cdk-lambda-cron",
+      "repo": "cdk-examples",
+      "source": "requirements",
+      "parser": "requirements",
+      "path": "python/lambda-cron/requirements.txt",
+      "label": "req-cdk-lambda-cron.json"
+    },
+    {
+      "id": "pkg-changesets",
+      "repo": "changesets",
+      "source": "package-json",
+      "parser": "package-json",
+      "path": "package.json",
+      "label": "pkg-changesets.json"
+    },
+    {
+      "id": "ws-changesets",
+      "repo": "changesets",
+      "source": "package-json",
+      "parser": "package-json-workspaces",
+      "path": ".",
+      "label": "ws-changesets.json"
+    },
+    {
+      "id": "lg-new-project",
+      "repo": "langgraph-new",
+      "source": "langgraph",
+      "parser": "langgraph",
+      "path": "src/agent/graph.py",
+      "label": "lg-new-project.json"
+    },
+    {
+      "id": "lg-open-deep-research",
+      "repo": "open-deep-research",
+      "source": "langgraph",
+      "parser": "langgraph",
+      "path": "src/open_deep_research/graph.py",
+      "label": "lg-open-deep-research.json"
+    },
+    {
+      "id": "crew-stock-analysis",
+      "repo": "crew-examples",
+      "source": "crewai",
+      "parser": "crewai",
+      "path": "stock_analysis/src/stock_analysis/crew.py",
+      "label": "crew-stock-analysis.json"
+    },
+    {
+      "id": "autogen-fastapi-team",
+      "repo": "autogen",
+      "source": "autogen",
+      "parser": "autogen",
+      "path": "python/samples/agentchat_fastapi/app_team.py",
+      "label": "autogen-fastapi-team.json"
+    },
+    {
+      "id": "otel-proto-trace",
+      "repo": "otel-proto",
+      "source": "otel-traces",
+      "parser": "otel-traces",
+      "path": "examples/trace.json",
+      "label": "otel-proto-trace.json"
+    },
+    {
+      "id": "otel-jaeger-ui",
+      "repo": "jaeger-ui",
+      "source": "otel-traces",
+      "parser": "otel-traces",
+      "path": "packages/jaeger-ui/src/components/TracePage/TraceGraph/testTrace.json",
+      "label": "otel-jaeger-ui.json"
+    },
+    {
+      "id": "compose-voting-app",
+      "repo": "example-voting-app",
+      "source": "docker-compose",
+      "parser": "docker-compose",
+      "path": "docker-compose.yml",
+      "label": "compose-voting-app.json"
+    },
+    {
+      "id": "k8s-guestbook",
+      "repo": "k8s-examples",
+      "source": "kubernetes",
+      "parser": "kubernetes",
+      "path": "guestbook",
+      "label": "k8s-guestbook.json"
+    },
+    {
+      "id": "tf-s3-object",
+      "repo": "tf-s3",
+      "source": "terraform",
+      "parser": "terraform",
+      "path": "examples/object",
+      "label": "tf-s3-object.json"
+    },
+    {
+      "id": "cfn-lambda-sample",
+      "repo": "cfn-lambda",
+      "source": "cloudformation",
+      "parser": "cloudformation",
+      "path": "Lambda/LambdaSample.yaml",
+      "label": "cfn-lambda-sample.json"
+    },
+    {
+      "id": "cdk-backend-component",
+      "repo": "cdk-structure",
+      "source": "aws-cdk",
+      "parser": "aws-cdk",
+      "path": "backend/component.py",
+      "label": "cdk-backend-component.json"
+    },
+    {
+      "id": "pulumi-s3-folder",
+      "repo": "pulumi-s3",
+      "source": "pulumi",
+      "parser": "pulumi",
+      "path": "aws-py-s3-folder/__main__.py",
+      "label": "pulumi-s3-folder.json"
+    },
+    {
+      "id": "gha-click-tests",
+      "repo": "click",
+      "source": "github-actions",
+      "parser": "github-actions",
+      "path": ".github/workflows/tests.yaml",
+      "label": "gha-click-tests.json"
+    },
+    {
+      "id": "py-click",
+      "repo": "click",
+      "source": "python-imports",
+      "parser": "python-imports",
+      "path": "src",
+      "label": "py-click.json"
+    },
+    {
+      "id": "pyproject-click",
+      "repo": "click",
+      "source": "pyproject",
+      "parser": "pyproject",
+      "path": "pyproject.toml",
+      "label": "pyproject-click.json"
+    },
+    {
+      "id": "pyproject-httpx",
+      "repo": "httpx",
+      "source": "pyproject",
+      "parser": "pyproject",
+      "path": "pyproject.toml",
+      "label": "pyproject-httpx.json"
+    },
+    {
+      "id": "req-httpx",
+      "repo": "httpx",
+      "source": "requirements",
+      "parser": "requirements",
+      "path": "requirements.txt",
+      "label": "req-httpx.json"
+    },
+    {
+      "id": "pkg-lerna",
+      "repo": "lerna",
+      "source": "package-json",
+      "parser": "package-json",
+      "path": "package.json",
+      "label": "pkg-lerna.json"
+    },
+    {
+      "id": "ws-lerna",
+      "repo": "lerna",
+      "source": "package-json",
+      "parser": "package-json-workspaces",
+      "path": ".",
+      "label": "ws-lerna.json"
+    },
+    {
+      "id": "lg-executive",
+      "repo": "executive-assistant",
+      "source": "langgraph",
+      "parser": "langgraph",
+      "path": "eaia/main/graph.py",
+      "label": "lg-executive.json"
+    },
+    {
+      "id": "crew-marketing",
+      "repo": "crew-marketing",
+      "source": "crewai",
+      "parser": "crewai",
+      "path": "marketing_strategy/src/marketing_posts/crew.py",
+      "label": "crew-marketing.json"
+    },
+    {
+      "id": "otel-zipkin-client",
+      "repo": "zipkin",
+      "source": "otel-traces",
+      "parser": "otel-traces",
+      "path": "benchmarks/src/test/resources/zipkin2-client.json",
+      "label": "otel-zipkin-client.json"
+    }
+  ]
+}

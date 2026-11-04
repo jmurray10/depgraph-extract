@@ -1,0 +1,36 @@
+name: Corpus
+
+# Manual only. Default CI stays offline. This job clones the pinned public
+# corpus, so it spends Actions minutes only when someone runs it.
+on:
+  workflow_dispatch:
+    inputs:
+      split:
+        description: Which split to score
+        type: choice
+        options:
+          - tuning
+          - held-out
+          - all
+        default: tuning
+      drift:
+        description: Also compare each repo's recorded HEAD sha
+        type: boolean
+        default: false
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e .
+      - name: Score pinned corpus
+        if: ${{ !inputs.drift }}
+        run: python corpus/score.py --clone --split "${{ inputs.split }}"
+      - name: Score pinned corpus and HEAD drift
+        if: ${{ inputs.drift }}
+        run: python corpus/score.py --clone --drift --split "${{ inputs.split }}"

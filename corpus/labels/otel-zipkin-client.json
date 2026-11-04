@@ -1,0 +1,4 @@
+{
+  "edges": [],
+  "note": "single Zipkin span object; parent span is not in the file. Parser accepts a JSON array, not one object."
+}

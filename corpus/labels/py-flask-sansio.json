@@ -1,0 +1,20 @@
+{
+  "edges": [
+    [
+      "app",
+      "scaffold"
+    ],
+    [
+      "app",
+      "blueprints"
+    ],
+    [
+      "blueprints",
+      "scaffold"
+    ],
+    [
+      "blueprints",
+      "app"
+    ]
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "edges": [
+    [
+      "web_site",
+      "web_bucket"
+    ],
+    [
+      "public_access_block",
+      "web_bucket"
+    ],
+    [
+      "obj",
+      "web_bucket"
+    ],
+    [
+      "bucket_policy",
+      "public_access_block"
+    ]
+  ]
+}
