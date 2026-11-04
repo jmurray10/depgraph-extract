@@ -1,0 +1,28 @@
+{
+  "edges": [
+    [
+      "{{dirname}}",
+      "pytest"
+    ],
+    [
+      "{{dirname}}",
+      "pytest-cov"
+    ],
+    [
+      "{{dirname}}",
+      "pytest-httpbin"
+    ],
+    [
+      "{{dirname}}",
+      "httpbin"
+    ],
+    [
+      "{{dirname}}",
+      "trustme"
+    ],
+    [
+      "{{dirname}}",
+      "wheel"
+    ]
+  ]
+}

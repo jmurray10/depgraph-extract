@@ -99,8 +99,10 @@ class TestAwsCdk:
         # construct vars and shouldn't produce edges.
         edges = extract.from_aws_cdk(str(FIXTURES / "cdk_app.py"))
         edges_set = {tuple(e) for e in edges}
-        # Sanity: only the role + vpc edges should appear (no spurious targets).
-        assert all(t in {"my_role", "my_vpc"} for _s, t in edges_set)
+        # grant_read(my_fn) is a real construct reference. Keyword literals
+        # (versioned=True, handler="index.handler") are not.
+        assert ("my_bucket", "my_fn") in edges_set
+        assert all(t in {"my_role", "my_vpc", "my_fn"} for _s, t in edges_set)
 
 
 # ---------- Pulumi ------------------------------------------------------

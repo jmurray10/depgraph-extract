@@ -1,0 +1,32 @@
+{
+  "edges": [
+    [
+      "financial_analyst_agent",
+      "financial_analysis"
+    ],
+    [
+      "research_analyst_agent",
+      "research"
+    ],
+    [
+      "financial_analyst_agent",
+      "filings_analysis"
+    ],
+    [
+      "investment_advisor_agent",
+      "recommend"
+    ],
+    [
+      "financial_analysis",
+      "research"
+    ],
+    [
+      "research",
+      "filings_analysis"
+    ],
+    [
+      "filings_analysis",
+      "recommend"
+    ]
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "edges": [
+    [
+      "frontend-external",
+      "frontend"
+    ]
+  ]
+}

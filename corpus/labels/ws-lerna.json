@@ -1,0 +1,12 @@
+{
+  "edges": [
+    [
+      "lerna-monorepo",
+      "lerna"
+    ],
+    [
+      "lerna",
+      "@lerna/create"
+    ]
+  ]
+}

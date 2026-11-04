@@ -1,0 +1,12 @@
+{
+  "edges": [
+    [
+      "backend",
+      "db"
+    ],
+    [
+      "proxy",
+      "backend"
+    ]
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "edges": [
+    [
+      "agent",
+      "yoda"
+    ],
+    [
+      "yoda",
+      "user_proxy"
+    ],
+    [
+      "user_proxy",
+      "agent"
+    ]
+  ]
+}

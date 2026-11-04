@@ -1,0 +1,8 @@
+{
+  "edges": [
+    [
+      "@changesets/cli",
+      "@changesets/logger"
+    ]
+  ]
+}

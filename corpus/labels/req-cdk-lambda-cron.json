@@ -1,0 +1,16 @@
+{
+  "edges": [
+    [
+      "{{dirname}}",
+      "aws-cdk-lib"
+    ],
+    [
+      "{{dirname}}",
+      "constructs"
+    ],
+    [
+      "{{dirname}}",
+      "pytest"
+    ]
+  ]
+}

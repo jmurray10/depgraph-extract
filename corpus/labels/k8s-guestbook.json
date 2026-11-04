@@ -1,0 +1,16 @@
+{
+  "edges": [
+    [
+      "frontend",
+      "frontend"
+    ],
+    [
+      "redis-master",
+      "redis-master"
+    ],
+    [
+      "redis-replica",
+      "redis-replica"
+    ]
+  ]
+}

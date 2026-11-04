@@ -1,0 +1,194 @@
+{
+  "edges": [
+    [
+      "click",
+      "core"
+    ],
+    [
+      "click",
+      "decorators"
+    ],
+    [
+      "click",
+      "exceptions"
+    ],
+    [
+      "click",
+      "formatting"
+    ],
+    [
+      "click",
+      "globals"
+    ],
+    [
+      "click",
+      "termui"
+    ],
+    [
+      "click",
+      "types"
+    ],
+    [
+      "click",
+      "utils"
+    ],
+    [
+      "_termui_impl",
+      "_compat"
+    ],
+    [
+      "_termui_impl",
+      "exceptions"
+    ],
+    [
+      "_termui_impl",
+      "utils"
+    ],
+    [
+      "_winconsole",
+      "_compat"
+    ],
+    [
+      "core",
+      "types"
+    ],
+    [
+      "core",
+      "exceptions"
+    ],
+    [
+      "core",
+      "formatting"
+    ],
+    [
+      "core",
+      "globals"
+    ],
+    [
+      "core",
+      "parser"
+    ],
+    [
+      "core",
+      "termui"
+    ],
+    [
+      "core",
+      "utils"
+    ],
+    [
+      "decorators",
+      "core"
+    ],
+    [
+      "decorators",
+      "globals"
+    ],
+    [
+      "decorators",
+      "utils"
+    ],
+    [
+      "exceptions",
+      "_compat"
+    ],
+    [
+      "exceptions",
+      "globals"
+    ],
+    [
+      "exceptions",
+      "utils"
+    ],
+    [
+      "formatting",
+      "_compat"
+    ],
+    [
+      "formatting",
+      "parser"
+    ],
+    [
+      "parser",
+      "exceptions"
+    ],
+    [
+      "shell_completion",
+      "core"
+    ],
+    [
+      "shell_completion",
+      "utils"
+    ],
+    [
+      "termui",
+      "_compat"
+    ],
+    [
+      "termui",
+      "exceptions"
+    ],
+    [
+      "termui",
+      "globals"
+    ],
+    [
+      "termui",
+      "types"
+    ],
+    [
+      "termui",
+      "utils"
+    ],
+    [
+      "testing",
+      "_compat"
+    ],
+    [
+      "testing",
+      "formatting"
+    ],
+    [
+      "testing",
+      "termui"
+    ],
+    [
+      "testing",
+      "utils"
+    ],
+    [
+      "types",
+      "_compat"
+    ],
+    [
+      "types",
+      "exceptions"
+    ],
+    [
+      "types",
+      "utils"
+    ],
+    [
+      "utils",
+      "_compat"
+    ],
+  [
+    "utils",
+    "globals"
+  ],
+  ["_compat", "_winconsole"],
+  ["click", "parser"],
+  ["core", "decorators"],
+  ["core", "shell_completion"],
+  ["exceptions", "core"],
+  ["formatting", "_textwrap"],
+  ["globals", "core"],
+  ["parser", "core"],
+  ["parser", "shell_completion"],
+  ["termui", "_termui_impl"],
+  ["testing", "core"],
+  ["types", "core"],
+  ["types", "shell_completion"],
+  ["utils", "exceptions"]
+]
+}

@@ -1,0 +1,12 @@
+{
+  "edges": [
+    [
+      "aws_iam_role_policy_attachment.vpc_flow_log_cloudwatch",
+      "aws_iam_role.vpc_flow_log_cloudwatch"
+    ],
+    [
+      "aws_iam_role_policy_attachment.vpc_flow_log_cloudwatch",
+      "aws_iam_policy.vpc_flow_log_cloudwatch"
+    ]
+  ]
+}

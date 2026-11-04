@@ -1,0 +1,20 @@
+{
+  "edges": [
+    [
+      "EC2Instance",
+      "IPAddress"
+    ],
+    [
+      "EC2Instance",
+      "InstanceSecurityGroup"
+    ],
+    [
+      "IPAssoc",
+      "IPAddress"
+    ],
+    [
+      "IPAssoc",
+      "EC2Instance"
+    ]
+  ]
+}

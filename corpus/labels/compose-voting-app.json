@@ -1,0 +1,24 @@
+{
+  "edges": [
+    [
+      "vote",
+      "redis"
+    ],
+    [
+      "result",
+      "db"
+    ],
+    [
+      "worker",
+      "redis"
+    ],
+    [
+      "worker",
+      "db"
+    ],
+    [
+      "seed",
+      "vote"
+    ]
+  ]
+}
