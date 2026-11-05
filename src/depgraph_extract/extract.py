@@ -107,8 +107,8 @@ def from_kubernetes(path: str = ".") -> list[tuple[str, str]]:
 
     Scans for Deployment/Service/Ingress resources and infers edges from
     label selectors, service references, and ingress backends. A metadata
-    name used by more than one object is qualified (``Service/frontend``,
-    ``Deployment/frontend``) so that pair is not dropped as a self-loop.
+    name used by more than one object is qualified (``Service/billing``,
+    ``Deployment/billing``) so that pair is not dropped as a self-loop.
 
     Args:
         path: Path to a YAML file or a directory containing YAML files.
@@ -155,7 +155,7 @@ def from_kubernetes(path: str = ".") -> list[tuple[str, str]]:
 
     # A Service and its Deployment often share a metadata name. Qualify any
     # name that belongs to more than one object so that link is
-    # ``Service/frontend -> Deployment/frontend`` instead of a dropped self-loop.
+    # ``Service/billing -> Deployment/billing`` instead of a dropped self-loop.
     # Names that appear once stay bare.
     named: list[tuple[str, str]] = []
     for svc_name in services:
@@ -301,9 +301,10 @@ def from_terraform(path: str = ".") -> list[tuple[str, str]]:
     """Extract resource dependency edges from Terraform files.
 
     Parses ``resource`` and ``module`` blocks. A block depends on every
-    ``type.name`` resource or ``module.name`` output it references. Each
-    block body stops at its own closing brace, so later blocks are not
-    attributed to the previous resource.
+    ``type.name`` resource or ``module.name`` output it references, including
+    references that only appear as ``local.x`` (followed through other
+    locals back to those addresses). Each block body stops at its own
+    closing brace, so later blocks are not attributed to the previous resource.
 
     Node labels are the resource or module name (``web``, ``main``). When
     that name is shared, the label is the full address (``aws_vpc.this``,
@@ -324,12 +325,9 @@ def from_terraform(path: str = ".") -> list[tuple[str, str]]:
     else:
         files = [path]
 
-    # `type.name` or `module.name`, optionally indexed, then an attribute.
-    # e.g. `aws_subnet.this[0].id`, `module.vpc.vpc_id`.
-    ref_pattern = re.compile(r"((?:module\.)?\w+\.\w+)(?:\[[^\]]*\])?\.")
-
     addresses: dict[str, str] = {}  # full address -> short label
     blocks: list[tuple[str, str]] = []  # (address, body)
+    contents: list[str] = []
 
     for f in files:
         try:
@@ -337,6 +335,7 @@ def from_terraform(path: str = ".") -> list[tuple[str, str]]:
                 content = fh.read()
         except Exception:
             continue
+        contents.append(content)
         for address, short, body in _tf_blocks(content):
             addresses[address] = short
             blocks.append((address, body))
@@ -348,17 +347,193 @@ def from_terraform(path: str = ".") -> list[tuple[str, str]]:
         if name_counts[short] > 1:
             addresses[full] = full
 
+    known = set(addresses)
+    local_targets = _tf_resolved_locals(contents, known)
+
     edges: list[tuple[str, str]] = []
     for address, body in blocks:
-        if address not in addresses:
-            continue
         src_label = addresses[address]
-        for ref_match in ref_pattern.finditer(body):
-            ref = ref_match.group(1)
-            if ref in addresses and ref != address:
-                edges.append((src_label, addresses[ref]))
+        seen_dst: set[str] = set()
+        for ref in _tf_ref_addresses(body, known, bare=False):
+            if ref == address:
+                continue
+            dst = addresses[ref]
+            if dst == src_label or dst in seen_dst:
+                continue
+            seen_dst.add(dst)
+            edges.append((src_label, dst))
+        for local_name in _TF_LOCAL_REF.findall(body):
+            for ref in local_targets.get(local_name, ()):
+                if ref == address:
+                    continue
+                dst = addresses[ref]
+                if dst == src_label or dst in seen_dst:
+                    continue
+                seen_dst.add(dst)
+                edges.append((src_label, dst))
 
     return _dedupe(edges)
+
+
+# Attribute access (`aws_subnet.this[0].id`, `module.vpc.vpc_id`) and a bare
+# address (`for g in aws_cloudwatch_log_group.main`). `local.x` is not an address.
+_TF_DOT_REF = re.compile(r"((?:module\.)?\w+\.\w+)(?:\[[^\]]*\])?\.")
+_TF_BARE_REF = re.compile(r"(?<![\w.])((?:module\.)?\w+\.\w+)(?![\w.])")
+_TF_LOCAL_REF = re.compile(r"(?<![\w.])local\.([A-Za-z_]\w*)")
+
+
+def _tf_ref_addresses(text: str, known: set[str], bare: bool) -> list[str]:
+    """Resource and module addresses mentioned in ``text``, in source order."""
+    found: list[str] = []
+    seen: set[str] = set()
+    for match in _TF_DOT_REF.finditer(text):
+        ref = match.group(1)
+        if ref in known and ref not in seen:
+            seen.add(ref)
+            found.append(ref)
+    if bare:
+        for match in _TF_BARE_REF.finditer(text):
+            ref = match.group(1)
+            if ref in known and ref not in seen:
+                seen.add(ref)
+                found.append(ref)
+    return found
+
+
+def _tf_resolved_locals(contents: list[str], known: set[str]) -> dict[str, tuple[str, ...]]:
+    """Map each ``local`` name to the resource addresses it reaches.
+
+    ``local.b = local.a`` follows ``a``. A cycle contributes nothing further.
+    The tuple is sorted so edge order does not depend on set iteration.
+    """
+    direct: dict[str, list[str]] = {}
+    via: dict[str, list[str]] = {}
+    for content in contents:
+        for body in _tf_locals_bodies(content):
+            for name, expr in _tf_local_assignments(body):
+                for ref in _tf_ref_addresses(expr, known, bare=True):
+                    bucket = direct.setdefault(name, [])
+                    if ref not in bucket:
+                        bucket.append(ref)
+                for other in _TF_LOCAL_REF.findall(expr):
+                    if other == name:
+                        continue
+                    bucket = via.setdefault(name, [])
+                    if other not in bucket:
+                        bucket.append(other)
+
+    resolved: dict[str, tuple[str, ...]] = {}
+
+    def walk(name: str, stack: frozenset[str]) -> tuple[str, ...]:
+        if name in resolved and name not in stack:
+            return resolved[name]
+        if name in stack:
+            return ()
+        acc: list[str] = []
+        seen: set[str] = set()
+        for ref in direct.get(name, ()):
+            if ref not in seen:
+                seen.add(ref)
+                acc.append(ref)
+        child = stack | {name}
+        for other in via.get(name, ()):
+            for ref in walk(other, child):
+                if ref not in seen:
+                    seen.add(ref)
+                    acc.append(ref)
+        found = tuple(sorted(acc))
+        if name not in stack:
+            resolved[name] = found
+        return found
+
+    for name in list(direct) + list(via):
+        walk(name, frozenset())
+    return resolved
+
+
+def _tf_locals_bodies(content: str):
+    """Yield the interior of each top-level ``locals`` block."""
+    header = re.compile(r"(?<![A-Za-z0-9_])locals\s*\{")
+    pos = 0
+    while True:
+        match = header.search(content, pos)
+        if not match:
+            break
+        body_start = match.end()
+        end = _tf_block_end(content, body_start)
+        yield content[body_start:end]
+        pos = end + 1
+
+
+def _tf_local_assignments(body: str) -> list[tuple[str, str]]:
+    """Top-level ``name = expr`` pairs inside a ``locals`` body.
+
+    Brace, bracket, and parenthesis depth stay at zero for a real local.
+    Strings, comments, and heredocs do not create extra assignments.
+    """
+    starts: list[tuple[str, int, int]] = []
+    i = 0
+    n = len(body)
+    depth = 0
+    while i < n:
+        nxt = _tf_skip_noise(body, i)
+        if nxt != i:
+            i = nxt
+            continue
+        ch = body[i]
+        if ch in "({[":
+            depth += 1
+            i += 1
+            continue
+        if ch in ")}]":
+            depth = max(0, depth - 1)
+            i += 1
+            continue
+        if depth == 0 and (ch.isalpha() or ch == "_"):
+            match = re.match(r"([A-Za-z_]\w*)\s*=", body[i:])
+            if match:
+                starts.append((match.group(1), i, i + match.end()))
+                i += match.end()
+                continue
+        i += 1
+    assigns: list[tuple[str, str]] = []
+    for idx, (name, _name_at, value_at) in enumerate(starts):
+        end = starts[idx + 1][1] if idx + 1 < len(starts) else n
+        assigns.append((name, body[value_at:end]))
+    return assigns
+
+
+def _tf_skip_noise(content: str, i: int) -> int:
+    """Index after a comment, string, or heredoc that starts at ``i``.
+
+    Returns ``i`` when ``content[i]`` is ordinary source.
+    """
+    n = len(content)
+    if i >= n:
+        return i
+    if content[i] == "#":
+        nl = content.find("\n", i)
+        return n if nl < 0 else nl + 1
+    if content.startswith("//", i):
+        nl = content.find("\n", i)
+        return n if nl < 0 else nl + 1
+    if content.startswith("/*", i):
+        end = content.find("*/", i + 2)
+        return n if end < 0 else end + 2
+    if content.startswith("<<", i):
+        return _tf_skip_heredoc(content, i)
+    if content[i] in {'"', "'"}:
+        quote = content[i]
+        j = i + 1
+        while j < n:
+            if content[j] == "\\" and quote == '"':
+                j += 2
+                continue
+            if content[j] == quote:
+                return j + 1
+            j += 1
+        return n
+    return i
 
 
 def _tf_blocks(content: str):
@@ -827,15 +1002,17 @@ def from_pyproject(path: str = "pyproject.toml") -> list[tuple[str, str]]:
     - ``[tool.poetry.dependencies]`` and ``[tool.poetry.group.*.dependencies]``
 
     Each requirement becomes ``project -> distribution``. The ``python``
-    interpreter bound is not a package edge. ``dynamic = ["dependencies"]``
-    is not resolved — there is nothing static to read.
+    interpreter bound is not a package edge. When ``dependencies`` or
+    ``optional-dependencies`` is listed in ``dynamic``, requirement files
+    named by ``[tool.setuptools.dynamic]`` or
+    ``[tool.hatch.metadata.hooks.requirements-txt]`` are read too.
 
     Args:
         path: Path to ``pyproject.toml``.
 
     Returns:
         Deduped ``(project, dependency)`` edges. An empty list when the file
-        declares no static requirements.
+        declares no requirements.
     """
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
@@ -844,11 +1021,29 @@ def from_pyproject(path: str = "pyproject.toml") -> list[tuple[str, str]]:
     deps: list[str] = []
     section = ""
     collecting: list[str] | None = None
+    collect_kind = ""
     poetry_deps = False
+    dynamic_fields: set[str] = set()
+    dynamic_files: dict[str, list[str]] = {
+        "dependencies": [],
+        "optional-dependencies": [],
+    }
 
-    def _close_array() -> None:
-        nonlocal collecting
+    def _take(kind: str, blob: str) -> None:
+        strings = _toml_strings(blob)
+        if kind == "deps":
+            deps.extend(_dist_name(item) or "" for item in strings)
+        elif kind == "dynamic":
+            dynamic_fields.update(strings)
+        elif kind in dynamic_files:
+            dynamic_files[kind].extend(strings)
+
+    def _finish_collecting() -> None:
+        nonlocal collecting, collect_kind
+        if collecting is not None:
+            _take(collect_kind, " ".join(collecting))
         collecting = None
+        collect_kind = ""
 
     for raw in text.splitlines():
         line = _toml_code(raw)
@@ -866,10 +1061,8 @@ def from_pyproject(path: str = "pyproject.toml") -> list[tuple[str, str]]:
             continue
         if collecting is not None:
             collecting.append(line)
-            if "]" in line:
-                blob = " ".join(collecting)
-                deps.extend(_dist_name(item) or "" for item in _toml_strings(blob))
-                _close_array()
+            if _toml_brackets_closed(" ".join(collecting)):
+                _finish_collecting()
             continue
         if section in {"project", "tool.poetry"} and "=" in line:
             name_key, name_value = line.split("=", 1)
@@ -883,45 +1076,119 @@ def from_pyproject(path: str = "pyproject.toml") -> list[tuple[str, str]]:
         key, value = line.split("=", 1)
         key = key.strip().strip('"').strip("'")
         value = value.strip()
-        array_keys = section in {
-            "project.optional-dependencies",
-            "dependency-groups",
-        } or (section == "project" and key == "dependencies")
-        if array_keys and value.startswith("["):
-            if "]" in value:
-                deps.extend(_dist_name(item) or "" for item in _toml_strings(value))
+        file_bucket = _pyproject_file_bucket(section, key)
+        if section == "project" and key == "dynamic":
+            kind = "dynamic"
+        elif file_bucket:
+            kind = file_bucket
+        elif section in {"project.optional-dependencies", "dependency-groups"} or (
+            section == "project" and key == "dependencies"
+        ):
+            kind = "deps"
+        else:
+            kind = ""
+        if kind and (value.startswith("[") or value.startswith("{")):
+            if _toml_brackets_closed(value):
+                _take(kind, value)
             else:
                 collecting = [value]
+                collect_kind = kind
+            continue
+        if kind in dynamic_files or kind == "dynamic":
+            _take(kind, value)
             continue
         if poetry_deps and key.lower() != "python":
             name = _dist_name(key)
             if name:
                 deps.append(name)
+    _finish_collecting()
 
     if not project:
         project = Path(path).parent.name
+
+    base = os.path.dirname(os.path.abspath(path))
+    file_refs: list[str] = []
+    if "dependencies" in dynamic_fields:
+        file_refs.extend(dynamic_files.get("dependencies", []))
+    if "optional-dependencies" in dynamic_fields:
+        file_refs.extend(dynamic_files.get("optional-dependencies", []))
+    for rel in file_refs:
+        req_path = rel if os.path.isabs(rel) else os.path.join(base, rel)
+        deps.extend(_requirement_names(req_path))
+
     edges = [(project, dep) for dep in deps if dep]
     return _dedupe(edges)
 
 
-def from_requirements(path: str = "requirements.txt") -> list[tuple[str, str]]:
-    """Extract dependency edges from a pip ``requirements.txt``.
+def _pyproject_file_bucket(section: str, key: str) -> str | None:
+    """Which dynamic field a setuptools or hatch file reference fills."""
+    hatch = (
+        "tool.hatch.metadata.hooks.requirements-txt",
+        "tool.hatch.metadata.hooks.requirements_txt",
+    )
+    if section in hatch and key in {"files", "filename", "file"}:
+        return "dependencies"
+    if section in {f"{name}.optional-dependencies" for name in hatch}:
+        return "optional-dependencies"
+    if section == "tool.setuptools.dynamic" and key == "dependencies":
+        return "dependencies"
+    if section == "tool.setuptools.dynamic.dependencies" and key == "file":
+        return "dependencies"
+    if section == "tool.setuptools.dynamic.optional-dependencies":
+        return "optional-dependencies"
+    if section.startswith("tool.setuptools.dynamic.optional-dependencies.") and key == "file":
+        return "optional-dependencies"
+    return None
 
-    The source node is the parent directory name (the project checkout).
-    Each requirement line becomes ``project -> distribution``. Comments,
-    options, ``-r`` / ``-c`` includes, and editable self-installs (``.``)
-    are skipped. ``-r other.txt`` is followed when it stays inside the
-    same directory.
 
-    Args:
-        path: Path to a requirements file.
+def _toml_brackets_closed(text: str) -> bool:
+    """True when ``[]`` / ``{}`` opened in ``text`` are balanced.
 
-    Returns:
-        Deduped ``(project, dependency)`` edges.
+    A plain string value has no brackets and counts as closed.
     """
-    root = os.path.abspath(path)
-    project = Path(root).parent.name
-    edges: list[tuple[str, str]] = []
+    depth_sq = 0
+    depth_cu = 0
+    opened = False
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if ch in {"'", '"'}:
+            if text.startswith(ch * 3, i):
+                end = text.find(ch * 3, i + 3)
+                if end < 0:
+                    return False
+                i = end + 3
+                continue
+            end = i + 1
+            while end < n and text[end] != ch:
+                if text[end] == "\\" and ch == '"':
+                    end += 2
+                    continue
+                end += 1
+            if end >= n:
+                return False
+            i = end + 1
+            continue
+        if ch == "[":
+            depth_sq += 1
+            opened = True
+        elif ch == "]":
+            depth_sq -= 1
+        elif ch == "{":
+            depth_cu += 1
+            opened = True
+        elif ch == "}":
+            depth_cu -= 1
+        i += 1
+    if not opened:
+        return True
+    return depth_sq <= 0 and depth_cu <= 0
+
+
+def _requirement_names(path: str) -> list[str]:
+    """Distribution names in a requirements file, following ``-r`` includes."""
+    names: list[str] = []
     seen_files: set[str] = set()
 
     def _read(file_path: str) -> None:
@@ -949,16 +1216,36 @@ def from_requirements(path: str = "requirements.txt") -> list[tuple[str, str]]:
                     continue
                 name = _dist_name(spec)
                 if name:
-                    edges.append((project, name))
+                    names.append(name)
                 continue
             if line.startswith("-"):
                 continue
             name = _dist_name(line)
             if name:
-                edges.append((project, name))
+                names.append(name)
 
-    _read(root)
-    return _dedupe(edges)
+    _read(path)
+    return names
+
+
+def from_requirements(path: str = "requirements.txt") -> list[tuple[str, str]]:
+    """Extract dependency edges from a pip ``requirements.txt``.
+
+    The source node is the parent directory name (the project checkout).
+    Each requirement line becomes ``project -> distribution``. Comments,
+    options, ``-r`` / ``-c`` includes, and editable self-installs (``.``)
+    are skipped. ``-r other.txt`` is followed when it stays inside the
+    same directory.
+
+    Args:
+        path: Path to a requirements file.
+
+    Returns:
+        Deduped ``(project, dependency)`` edges.
+    """
+    root = os.path.abspath(path)
+    project = Path(root).parent.name
+    return _dedupe([(project, name) for name in _requirement_names(root)])
 
 
 # ---------------------------------------------------------------------------
@@ -1533,29 +1820,54 @@ def _lg_norm(label: str | None) -> str | None:
     return _LG_SENTINELS.get(label, label)
 
 
-def _lg_targets(expr: ast.expr | None) -> list[str]:
+def _lg_bindings(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> dict[str, list[ast.expr]]:
+    """Assignments in ``fn``'s body, excluding nested functions, classes, and lambdas."""
+    found: dict[str, list[ast.expr]] = {}
+    stack: list[ast.AST] = list(reversed(fn.body))
+    while stack:
+        current = stack.pop()
+        if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            continue
+        assigned = _assigned_name_value(current)
+        if assigned is not None:
+            name, value = assigned
+            found.setdefault(name, []).append(value)
+        stack.extend(reversed(list(ast.iter_child_nodes(current))))
+    return found
+
+
+def _lg_targets(
+    expr: ast.expr | None,
+    bindings: dict[str, list[ast.expr]] | None = None,
+    seen: frozenset[str] | None = None,
+) -> list[str]:
     """Literal goto targets: strings, END/START, lists, and conditional expressions.
 
-    A bare variable (``goto=next_node``) is dynamic, so it contributes nothing.
-    ``path_map`` values use :func:`_lg_path_targets`, which does keep names.
+    A bare variable contributes targets only when every assignment of that
+    name in ``bindings`` (the enclosing function) is itself a static target.
+    One dynamic assignment makes the name dynamic. Names with no assignment
+    in that scope contribute nothing. ``path_map`` values use
+    :func:`_lg_path_targets`, which does keep names.
     """
     if expr is None:
         return []
+    if seen is None:
+        seen = frozenset()
     # py3.9 may wrap a subscript index in ast.Index.
     if type(expr).__name__ == "Index":
-        return _lg_targets(getattr(expr, "value", None))
+        return _lg_targets(getattr(expr, "value", None), bindings, seen)
     if isinstance(expr, (ast.List, ast.Tuple, ast.Set)):
         out: list[str] = []
         for elt in expr.elts:
-            out.extend(_lg_targets(elt))
+            out.extend(_lg_targets(elt, bindings, seen))
         return out
     if isinstance(expr, ast.IfExp):
-        return _lg_targets(expr.body) + _lg_targets(expr.orelse)
+        return _lg_targets(expr.body, bindings, seen) + _lg_targets(expr.orelse, bindings, seen)
     if isinstance(expr, ast.Call) and _call_name(expr.func) == "Send" and expr.args:
         # Command(goto=[Send("node", {...})]) routes to that node.
-        return _lg_targets(expr.args[0])
+        return _lg_targets(expr.args[0], bindings, seen)
     if isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.BitOr):
-        return _lg_targets(expr.left) + _lg_targets(expr.right)
+        return _lg_targets(expr.left, bindings, seen) + _lg_targets(expr.right, bindings, seen)
     if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
         norm = _lg_norm(expr.value)
         return [norm] if norm else []
@@ -1563,6 +1875,15 @@ def _lg_targets(expr: ast.expr | None) -> list[str]:
         return [expr.id]
     if isinstance(expr, ast.Attribute) and expr.attr in ("END", "START"):
         return [expr.attr]
+    if isinstance(expr, ast.Name) and bindings and expr.id in bindings and expr.id not in seen:
+        out = []
+        child = seen | {expr.id}
+        for value in bindings[expr.id]:
+            part = _lg_targets(value, bindings, child)
+            if not part:
+                return []
+            out.extend(part)
+        return out
     return []
 
 
@@ -1604,9 +1925,10 @@ def _lg_router_targets(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
     """Static branch targets of a conditional-edge router.
 
     Uses the return annotation (``Literal["a", "b"]``, including a stringized
-    annotation) and ``return "node"`` / ``return END`` constants. A returned
-    variable is dynamic and contributes nothing.
+    annotation), ``return "node"`` / ``return END`` constants, and a returned
+    name when every assignment of that name in this function is a static target.
     """
+    bindings = _lg_bindings(fn)
     ann: ast.expr | None = fn.returns
     if isinstance(ann, ast.Constant) and isinstance(ann.value, str):
         try:
@@ -1621,7 +1943,7 @@ def _lg_router_targets(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
         if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
             continue
         if isinstance(current, ast.Return) and current.value is not None:
-            found.extend(_lg_targets(current.value))
+            found.extend(_lg_targets(current.value, bindings))
         stack.extend(reversed(list(ast.iter_child_nodes(current))))
     return found
 
@@ -1691,7 +2013,13 @@ def from_langgraph(path: str) -> list[tuple[str, str]]:
     - ``g.set_entry_point("planner")`` / ``g.set_finish_point("act")``
     - ``Command(goto="next")`` / ``Command(goto=[...])`` returned from a node
       function, and ``-> Command[Literal["a", "b"]]`` return annotations
-      (``__end__`` / ``__start__`` normalize to ``END`` / ``START``)
+      (``__end__`` / ``__start__`` normalize to ``END`` / ``START``).
+      ``goto=dest`` is included when ``dest`` is assigned only from string
+      constants in that same function.
+    - a Jupyter ``.ipynb`` notebook. Code cells are concatenated (stdlib
+      ``json`` only) and parsed with the same AST path. Line magics are
+      dropped. A cell that does not parse is left out and the rest stay
+      one module; cells are parsed alone only if that still fails.
     - several ``StateGraph`` builders in one file. Each keeps its own
       START/END. A builder compiled and mounted as a node of another graph
       (``parent.add_node("x", sub.compile())``) is wired in as
@@ -1700,14 +2028,79 @@ def from_langgraph(path: str) -> list[tuple[str, str]]:
       the file that is not mounted keeps the bare ``START`` / ``END`` labels.
 
     Args:
-        path: Path to a Python file defining the graph.
+        path: Path to a Python file or ``.ipynb`` notebook defining the graph.
 
     Returns:
         Deduped list of ``(source, target)`` edges.
     """
     with open(path, encoding="utf-8") as f:
-        tree = ast.parse(f.read(), filename=path)
+        text = f.read()
+    if str(path).endswith(".ipynb"):
+        return _langgraph_notebook(text, path)
+    return _langgraph_edges(ast.parse(text, filename=path))
 
+
+def _notebook_code_cells(text: str) -> list[str]:
+    """Python source of each code cell. Line magics and shell lines are dropped."""
+    data = json.loads(text)
+    cells = data.get("cells") if isinstance(data, dict) else None
+    if not isinstance(cells, list):
+        return []
+    chunks: list[str] = []
+    for cell in cells:
+        if not isinstance(cell, dict) or cell.get("cell_type") != "code":
+            continue
+        source = cell.get("source") or ""
+        if isinstance(source, list):
+            source = "".join(part for part in source if isinstance(part, str))
+        if not isinstance(source, str):
+            continue
+        lines = []
+        for line in source.splitlines():
+            stripped = line.lstrip()
+            if stripped.startswith("%") or stripped.startswith("!"):
+                continue
+            lines.append(line)
+        chunks.append("\n".join(lines))
+    return chunks
+
+
+def _langgraph_notebook(text: str, path: str) -> list[tuple[str, str]]:
+    """Parse code cells as one module.
+
+    A cell that is not valid Python is dropped and the rest stay together,
+    so a magic or a newer syntax form does not split the notebook into
+    isolated cells. If the remaining cells still do not parse as one module,
+    each cell is scored on its own.
+    """
+    cells = _notebook_code_cells(text)
+
+    def _parse(source: str, filename: str) -> list[tuple[str, str]] | None:
+        try:
+            return _langgraph_edges(ast.parse(source, filename=filename))
+        except SyntaxError:
+            return None
+
+    combined = _parse("\n\n".join(cells), path)
+    if combined is not None:
+        return combined
+    good: list[str] = []
+    for cell in cells:
+        if _parse(cell, path) is not None:
+            good.append(cell)
+    if good:
+        combined = _parse("\n\n".join(good), path)
+        if combined is not None:
+            return combined
+    edges: list[tuple[str, str]] = []
+    for index, cell in enumerate(cells):
+        found = _parse(cell, f"{path}:cell{index}")
+        if found:
+            edges.extend(found)
+    return _dedupe(edges)
+
+
+def _langgraph_edges(tree: ast.AST) -> list[tuple[str, str]]:
     # 1. Builders (`x = StateGraph(...)`) and compiled aliases (`y = x.compile()`),
     # in source order so "last graph" is the last one in the file.
     builders: list[str] = []
@@ -1833,9 +2226,10 @@ def from_langgraph(path: str) -> list[tuple[str, str]]:
         if fdef.name not in func_to_nodes:
             continue
         targets = list(_lg_annotation_targets(fdef.returns))
+        bindings = _lg_bindings(fdef)
         for call in _calls_skipping_nested(fdef):
             if _call_name(call.func) == "Command":
-                targets.extend(_lg_targets(_kwargs(call).get("goto")))
+                targets.extend(_lg_targets(_kwargs(call).get("goto"), bindings))
         for node_owner, node_name in func_to_nodes[fdef.name]:
             for target in targets:
                 raw.append((node_owner, node_name, target))
@@ -2269,6 +2663,66 @@ _DIRECTORY_SOURCES = frozenset({
 })
 
 
+def _compose_stack_labels(entries: list[tuple[str, str | None, str]]) -> list[str]:
+    """One stable label per compose file.
+
+    ``entries`` are ``(directory relative to the scan root, project name, filename stem)``.
+    The compose ``name`` wins when it is unique. Otherwise the directory
+    basename is used, then the relative directory, then the filename stem
+    when two files share a directory.
+    """
+    preferred: list[str] = []
+    for rel, project, stem in entries:
+        if project:
+            preferred.append(project)
+            continue
+        if rel in {"", "."}:
+            preferred.append(stem or "compose")
+        else:
+            preferred.append(os.path.basename(rel) or stem or "compose")
+    if len(preferred) == len(set(preferred)):
+        return preferred
+
+    fallbacks: list[str] = []
+    for rel, project, stem in entries:
+        folder = stem if rel in {"", "."} else rel.replace("\\", "/")
+        fallbacks.append(f"{project}/{folder}" if project else folder)
+    counts: dict[str, int] = {}
+    for label in fallbacks:
+        counts[label] = counts.get(label, 0) + 1
+    seen: dict[str, int] = {}
+    labels: list[str] = []
+    for label in fallbacks:
+        if counts[label] == 1:
+            labels.append(label)
+            continue
+        seen[label] = seen.get(label, 0) + 1
+        labels.append(f"{label}-{seen[label]}")
+    return labels
+
+
+def _qualify_compose_edges(
+    stacks: list[tuple[str, list[tuple[str, str]]]],
+) -> list[tuple[str, str]]:
+    """Prefix a service with its stack label when another stack uses that name."""
+    users: dict[str, set[str]] = {}
+    for label, edges in stacks:
+        for src, dst in edges:
+            users.setdefault(src, set()).add(label)
+            users.setdefault(dst, set()).add(label)
+
+    def qual(label: str, name: str) -> str:
+        if len(users.get(name, ())) > 1:
+            return f"{label}/{name}"
+        return name
+
+    qualified: list[tuple[str, str]] = []
+    for label, edges in stacks:
+        for src, dst in edges:
+            qualified.append((qual(label, src), qual(label, dst)))
+    return qualified
+
+
 def _source_selection(value: Any, param: str) -> set[str] | None:
     """Normalize ``include`` / ``exclude`` to a set of known source labels."""
     if value is None:
@@ -2338,24 +2792,44 @@ def from_directory(
         return (chosen is None or label in chosen) and label not in skipped
 
     # Docker Compose — any compose file under the tree, not only the root.
-    # Stacks in different directories share one edge list; identical service
-    # names from unrelated files collapse, the same way Terraform does.
+    # A service name used by more than one stack is qualified with that
+    # stack's label (the compose project name, otherwise the directory).
+    # A name that appears in only one stack stays bare.
     if _want("docker-compose"):
         compose_names = {"docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"}
         skip_dirs = {".git", "node_modules", ".venv", "venv", "__pycache__"}
+        found: list[tuple[str, str | None, str, list[tuple[str, str]]]] = []
         for dirpath, dirnames, filenames in os.walk(path):
             dirnames[:] = [d for d in dirnames if d not in skip_dirs and not d.startswith(".")]
-            for name in filenames:
+            for name in sorted(filenames):
                 if name not in compose_names:
                     continue
                 compose_path = os.path.join(dirpath, name)
                 try:
+                    data = _load_single_yaml(compose_path)
                     edges = from_docker_compose(compose_path)
-                    if edges:
-                        all_edges.extend(edges)
-                        sources["docker-compose"] = sources.get("docker-compose", 0) + len(edges)
                 except Exception:
-                    pass
+                    continue
+                if not edges:
+                    continue
+                rel = os.path.relpath(
+                    os.path.dirname(os.path.abspath(compose_path)),
+                    os.path.abspath(path),
+                )
+                project = None
+                if isinstance(data, dict):
+                    raw_name = data.get("name")
+                    if isinstance(raw_name, str) and raw_name.strip():
+                        project = raw_name.strip()
+                found.append((rel, project, Path(compose_path).stem, edges))
+        found.sort(key=lambda item: (item[0], item[2]))
+        labels = _compose_stack_labels([(rel, project, stem) for rel, project, stem, _edges in found])
+        qualified = _qualify_compose_edges(
+            [(label, edges) for label, (_rel, _project, _stem, edges) in zip(labels, found)]
+        )
+        if qualified:
+            all_edges.extend(qualified)
+            sources["docker-compose"] = len(qualified)
 
     # Kubernetes — find any directory containing YAML that declares a k8s
     # resource (`apiVersion` + `kind`), rather than trusting conventional dir
@@ -2498,12 +2972,21 @@ def from_directory(
     py_files = [f for f in py_files if not any(
         p in f for p in ["node_modules", ".venv", "venv", "__pycache__", ".git"]
     )]
+    if _want("langgraph"):
+        for fpath in glob.glob(os.path.join(path, "**/*.ipynb"), recursive=True):
+            if any(p in fpath for p in ("node_modules", ".venv", "venv", "__pycache__", ".git")):
+                continue
+            py_files.append(fpath)
     for fpath in py_files:
         try:
-            head = open(fpath, encoding="utf-8", errors="replace").read(4096)
+            with open(fpath, encoding="utf-8", errors="replace") as fh:
+                head = fh.read() if fpath.endswith(".ipynb") else fh.read(4096)
         except OSError:
             continue
-        for label, prefixes, parser in py_specs:
+        specs = py_specs
+        if fpath.endswith(".ipynb"):
+            specs = tuple(spec for spec in py_specs if spec[0] == "langgraph")
+        for label, prefixes, parser in specs:
             if not any(f"import {p}" in head or f"from {p}" in head for p in prefixes):
                 continue
             try:

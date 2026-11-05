@@ -1,0 +1,44 @@
+{
+  "edges": [
+    [
+      "START[research_builder]",
+      "supervisor"
+    ],
+    [
+      "search",
+      "supervisor"
+    ],
+    [
+      "web_scraper",
+      "supervisor"
+    ],
+    [
+      "START[paper_writing_builder]",
+      "supervisor"
+    ],
+    [
+      "doc_writer",
+      "supervisor"
+    ],
+    [
+      "note_taker",
+      "supervisor"
+    ],
+    [
+      "chart_generator",
+      "supervisor"
+    ],
+    [
+      "START",
+      "supervisor"
+    ],
+    [
+      "research_team",
+      "supervisor"
+    ],
+    [
+      "writing_team",
+      "supervisor"
+    ]
+  ]
+}

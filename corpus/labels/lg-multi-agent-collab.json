@@ -1,0 +1,24 @@
+{
+  "edges": [
+    [
+      "researcher",
+      "chart_generator"
+    ],
+    [
+      "researcher",
+      "END"
+    ],
+    [
+      "chart_generator",
+      "researcher"
+    ],
+    [
+      "chart_generator",
+      "END"
+    ],
+    [
+      "START",
+      "researcher"
+    ]
+  ]
+}

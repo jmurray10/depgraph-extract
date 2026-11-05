@@ -1,5 +1,5 @@
 {
-  "described_on": "2026-11-04",
+  "described_on": "2026-11-05",
   "repos": [
     {
       "id": "awesome-compose",
@@ -313,6 +313,55 @@
       "sparse": [
         "src/react_agent/graph.py"
       ]
+    },
+    {
+      "id": "tf-eventbridge",
+      "split": "held-out",
+      "url": "https://github.com/terraform-aws-modules/terraform-aws-eventbridge.git",
+      "sha": "e29707a5057ec9b0f6ea87686e9a5b48b4addd11",
+      "head": "e29707a5057ec9b0f6ea87686e9a5b48b4addd11",
+      "sparse": [
+        "iam.tf",
+        "iam_pipes.tf",
+        "main.tf",
+        "outputs.tf",
+        "variables.tf",
+        "versions.tf"
+      ]
+    },
+    {
+      "id": "langgraph",
+      "split": "held-out",
+      "url": "https://github.com/langchain-ai/langgraph.git",
+      "sha": "23961cff61a42b52525f3b20b4094d8d2fba1744",
+      "head": "6ea1751a93bda2b57bbf38dea494c461c34e13df",
+      "sparse": [
+        "docs/docs/tutorials/multi_agent/hierarchical_agent_teams.ipynb",
+        "docs/docs/tutorials/multi_agent/multi-agent-collaboration.ipynb"
+      ]
+    },
+    {
+      "id": "gradio",
+      "split": "held-out",
+      "url": "https://github.com/gradio-app/gradio.git",
+      "sha": "ebccfcf3194dd3cd132491a6bc35968f1321611a",
+      "head": "ebccfcf3194dd3cd132491a6bc35968f1321611a",
+      "sparse": [
+        "pyproject.toml",
+        "requirements.txt",
+        "requirements-oauth.txt",
+        "requirements-mcp.txt"
+      ]
+    },
+    {
+      "id": "otel-demo",
+      "split": "held-out",
+      "url": "https://github.com/open-telemetry/opentelemetry-demo.git",
+      "sha": "0aeadb11cf3ecaac318bacd1986f23eff531c8f5",
+      "head": "0aeadb11cf3ecaac318bacd1986f23eff531c8f5",
+      "sparse": [
+        "compose.yaml"
+      ]
     }
   ],
   "cases": [
@@ -619,6 +668,46 @@
       "parser": "langgraph",
       "path": "src/react_agent/graph.py",
       "label": "lg-react-agent.json"
+    },
+    {
+      "id": "tf-eventbridge",
+      "repo": "tf-eventbridge",
+      "source": "terraform",
+      "parser": "terraform",
+      "path": ".",
+      "label": "tf-eventbridge.json"
+    },
+    {
+      "id": "lg-hierarchical-teams",
+      "repo": "langgraph",
+      "source": "langgraph",
+      "parser": "langgraph",
+      "path": "docs/docs/tutorials/multi_agent/hierarchical_agent_teams.ipynb",
+      "label": "lg-hierarchical-teams.json"
+    },
+    {
+      "id": "lg-multi-agent-collab",
+      "repo": "langgraph",
+      "source": "langgraph",
+      "parser": "langgraph",
+      "path": "docs/docs/tutorials/multi_agent/multi-agent-collaboration.ipynb",
+      "label": "lg-multi-agent-collab.json"
+    },
+    {
+      "id": "pyproject-gradio",
+      "repo": "gradio",
+      "source": "pyproject",
+      "parser": "pyproject",
+      "path": "pyproject.toml",
+      "label": "pyproject-gradio.json"
+    },
+    {
+      "id": "compose-otel-demo",
+      "repo": "otel-demo",
+      "source": "docker-compose",
+      "parser": "docker-compose",
+      "path": "compose.yaml",
+      "label": "compose-otel-demo.json"
     }
   ]
 }
