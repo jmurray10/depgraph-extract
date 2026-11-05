@@ -5,6 +5,7 @@ tests lock the generic parser behavior those claims depend on.
 """
 from __future__ import annotations
 
+import json
 import textwrap
 from pathlib import Path
 
@@ -281,6 +282,189 @@ def test_python_imports_package_root_init(tmp_path):
     edges = {tuple(e) for e in extract.from_python_imports(str(pkg))}
     assert ("click", "core") in edges
     assert ("core", "utils") in edges
+
+
+def test_terraform_local_refs_resolve_to_resources(tmp_path):
+    (tmp_path / "main.tf").write_text(textwrap.dedent("""\
+        locals {
+          bucket_id = aws_s3_bucket.logs.id
+          # not an assignment: foo = aws_s3_bucket.ghost.id
+          aliases   = [local.bucket_id, aws_s3_bucket.extra.id]
+          groups    = [for g in aws_cloudwatch_log_group.main : g.arn]
+          missing   = local.unknown
+        }
+        resource "aws_iam_policy" "read" {
+          resources = [local.aliases, local.groups, local.missing]
+        }
+        resource "aws_s3_bucket" "logs" {
+          tags = { Name = local.bucket_id }
+        }
+        resource "aws_s3_bucket" "extra" {}
+        resource "aws_cloudwatch_log_group" "main" {}
+    """))
+    edges = set(extract.from_terraform(str(tmp_path)))
+    assert ("read", "logs") in edges
+    assert ("read", "extra") in edges
+    assert ("read", "main") in edges
+    assert ("logs", "logs") not in edges
+    assert not any("ghost" in node or "unknown" in node for edge in edges for node in edge)
+
+
+def test_langgraph_notebook_and_same_scope_goto(tmp_path):
+    notebook = {
+        "cells": [
+            {"cell_type": "markdown", "source": ["ignore Command(goto='markdown')"]},
+            {
+                "cell_type": "code",
+                "source": [
+                    "%pip install langgraph\n",
+                    "from langgraph.graph import StateGraph, START, END\n",
+                    "from langgraph.types import Command\n",
+                ],
+            },
+            {
+                "cell_type": "code",
+                "source": [
+                    "def node(state):\n",
+                    "    dest = 'sink'\n",
+                    "    return Command(goto=dest)\n",
+                    "def other(state):\n",
+                    "    dest = 'nope'\n",
+                    "    return state\n",
+                    "def mixed(state):\n",
+                    "    dest = 'kept'\n",
+                    "    dest = state['next']\n",
+                    "    return Command(goto=dest)\n",
+                ],
+            },
+            {
+                "cell_type": "code",
+                "source": [
+                    "g = StateGraph(dict)\n",
+                    "g.add_node('node', node)\n",
+                    "g.add_node('other', other)\n",
+                    "g.add_node('mixed', mixed)\n",
+                    "g.add_node('sink', lambda s: s)\n",
+                    "g.add_edge(START, 'node')\n",
+                    "g.add_edge('sink', END)\n",
+                ],
+            },
+        ]
+    }
+    path = tmp_path / "graph.ipynb"
+    path.write_text(json.dumps(notebook))
+    edges = set(extract.from_langgraph(str(path)))
+    assert ("node", "sink") in edges
+    assert ("START", "node") in edges
+    assert ("sink", "END") in edges
+    assert ("other", "nope") not in edges
+    assert ("mixed", "kept") not in edges
+
+    script = tmp_path / "g.py"
+    script.write_text(textwrap.dedent("""\
+        from langgraph.graph import StateGraph, START, END
+        from langgraph.types import Command
+        OUTSIDE = "outside"
+        def router(state):
+            dest = "alpha" if state else "beta"
+            return dest
+        def node(state):
+            return Command(goto=OUTSIDE)
+        g = StateGraph(dict)
+        g.add_node("router", router)
+        g.add_node("node", node)
+        g.add_conditional_edges("router", router)
+        g.add_edge(START, "node")
+    """))
+    edges = set(extract.from_langgraph(str(script)))
+    assert ("router", "alpha") in edges
+    assert ("router", "beta") in edges
+    assert ("node", "outside") not in edges
+
+    broken = tmp_path / "broken.ipynb"
+    broken.write_text(json.dumps({
+        "cells": [
+            {"cell_type": "code", "source": ["def node(state):\n", "    dest = 'sink'\n", "    return Command(goto=dest)\n"]},
+            {"cell_type": "code", "source": ["this is not valid python $$$ \n"]},
+            {"cell_type": "code", "source": [
+                "from langgraph.graph import StateGraph, START\n",
+                "from langgraph.types import Command\n",
+                "g = StateGraph(dict)\n",
+                "g.add_node('node', node)\n",
+                "g.add_edge(START, 'node')\n",
+            ]},
+        ]
+    }))
+    edges = set(extract.from_langgraph(str(broken)))
+    assert ("node", "sink") in edges
+    assert ("START", "node") in edges
+
+
+def test_compose_stacks_namespace_shared_service_names(tmp_path):
+    api = tmp_path / "api"
+    worker = tmp_path / "worker"
+    solo = tmp_path / "solo"
+    for directory in (api, worker, solo):
+        directory.mkdir()
+    (api / "compose.yaml").write_text(
+        "name: shop\nservices:\n  web:\n    depends_on: [db]\n  db:\n    image: postgres\n"
+    )
+    (worker / "compose.yaml").write_text(
+        "name: shop\nservices:\n  web:\n    depends_on: [cache]\n  cache:\n    image: redis\n"
+    )
+    (solo / "compose.yaml").write_text(
+        "services:\n  only:\n    depends_on: [redis]\n  redis:\n    image: redis\n"
+    )
+    edges, sources = extract.from_directory(str(tmp_path), include="docker-compose")
+    found = {tuple(edge) for edge in edges}
+    assert ("shop/api/web", "shop/api/db") in found or ("shop/api/web", "db") in found
+    # Both stacks are named shop, so the directory keeps the webs apart.
+    assert ("shop/api/web", "db") in found
+    assert ("shop/worker/web", "cache") in found
+    assert ("only", "redis") in found
+    assert sources["docker-compose"] == 3
+    assert not any(src == "web" or dst == "web" for src, dst in found)
+
+
+def test_pyproject_dynamic_file_dependencies(tmp_path):
+    (tmp_path / "requirements.txt").write_text("requests>=2\n-r extra.txt\n")
+    (tmp_path / "extra.txt").write_text("flask\n")
+    (tmp_path / "requirements-dev.txt").write_text("pytest\n")
+    (tmp_path / "pyproject.toml").write_text(textwrap.dedent("""\
+        [project]
+        name = "demo"
+        dynamic = ["dependencies", "optional-dependencies"]
+
+        [tool.setuptools.dynamic]
+        dependencies = { file = ["requirements.txt"] }
+
+        [tool.setuptools.dynamic.optional-dependencies]
+        dev = { file = "requirements-dev.txt" }
+    """))
+    edges = set(extract.from_pyproject(str(tmp_path / "pyproject.toml")))
+    assert edges == {("demo", "requests"), ("demo", "flask"), ("demo", "pytest")}
+
+    hatch = tmp_path / "hatch"
+    hatch.mkdir()
+    (hatch / "reqs.txt").write_text("httpx\n")
+    (hatch / "dev.txt").write_text("pytest\n")
+    (hatch / "pyproject.toml").write_text(textwrap.dedent("""\
+        [project]
+        name = "boxed"
+        dynamic = ["version", "dependencies"]
+        dependencies = ["should-not-be-here"]
+
+        [tool.hatch.metadata.hooks.requirements-txt]
+        files = ["reqs.txt"]
+
+        [tool.hatch.metadata.hooks.requirements-txt.optional-dependencies]
+        dev = ["dev.txt"]
+    """))
+    edges = set(extract.from_pyproject(str(hatch / "pyproject.toml")))
+    # optional-dependencies is not dynamic, so dev.txt is not an edge.
+    assert ("boxed", "httpx") in edges
+    assert ("boxed", "pytest") not in edges
+    assert ("boxed", "should-not-be-here") in edges
 
 
 def test_quickstart_compose_has_five_services():

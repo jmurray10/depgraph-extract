@@ -189,7 +189,7 @@ def test_langgraph_ignores_dynamic_goto_and_nested_helpers(tmp_path):
         def outer(state):
             def helper(state):
                 return Command(goto="from_helper")
-            nxt = "nope"
+            nxt = state["next"]
             return Command(goto=nxt)
         def real(state):
             return Command(goto="real_next")

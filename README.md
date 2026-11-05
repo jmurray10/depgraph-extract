@@ -98,10 +98,10 @@ Fifteen parsers. Each one returns `list[tuple[str, str]]`.
 
 | Category | Sources |
 |---|---|
-| **Agent frameworks** | LangGraph, CrewAI, AutoGen — Python AST, the framework is not imported |
+| **Agent frameworks** | LangGraph (`.py` and `.ipynb`), CrewAI, AutoGen — Python AST, the framework is not imported |
 | **Containers & orchestration** | Docker Compose (`depends_on`, `links`), Kubernetes (Service selectors, Ingress backends) |
-| **Infrastructure as code** | Terraform `resource` and `module` blocks, CloudFormation (`DependsOn`, `Ref`, `Fn::GetAtt`, `Fn::Sub`), AWS CDK (Python), Pulumi (Python) |
-| **CI / packaging** | GitHub Actions `needs`, `package.json` dependencies and workspaces, `pyproject.toml` (PEP 621, dependency-groups, Poetry), `requirements.txt` |
+| **Infrastructure as code** | Terraform `resource`, `module`, and `local` references, CloudFormation (`DependsOn`, `Ref`, `Fn::GetAtt`, `Fn::Sub`), AWS CDK (Python), Pulumi (Python) |
+| **CI / packaging** | GitHub Actions `needs`, `package.json` dependencies and workspaces, `pyproject.toml` (PEP 621, dependency-groups, Poetry, setuptools/hatch dynamic files), `requirements.txt` |
 | **Code** | Python imports, including relative imports, with adjustable module `depth` |
 | **Telemetry** | OpenTelemetry traces — OTLP JSON, Jaeger query JSON, Zipkin v2 (one span or an array). A Zipkin `remoteEndpoint` is the other side of the call |
 
@@ -140,47 +140,58 @@ Anthropic or Google, which is why it's off by default.
 
 ## What it does not extract
 
-- **Terraform values that only live in `locals`.** A `module` or `resource`
-  edge is a direct `type.name` / `module.name` reference in that block.
-  A relative `source = "../../"` path is not a node. Shared short names
-  become the full address (`aws_vpc.this`, `module.vpc`).
+- **Terraform data sources, and a bare `depends_on` address.** A `local.x`
+  used by a resource or module is followed back to the resources it names,
+  including through other locals. A `data` block is not a node, and a
+  reference that only appears inside one is not an edge. A relative
+  `source = "../../"` path is not a node. Shared short names become the
+  full address (`aws_vpc.this`, `module.vpc`).
 - **Construct calls that are not assigned.** `Monitoring(self, "Monitoring", database=database)`
   has no variable, so it is not a node. Assigned calls are, including
   `from backend.api import API` then `API(self, "API", ...)`.
-- **LangGraph notebooks, and `goto` values that are only variables.**
-  `add_conditional_edges` without a `path_map` uses the router's
-  `Literal[...]` annotation and returned string constants. `Send("node")`
-  inside `Command(goto=...)` is an edge.
+- **LangGraph `goto` values that are not string constants in that function.**
+  `goto=dest` counts when every assignment of `dest` in the same function
+  is a string, `END`/`START`, or a list or conditional of those. A call,
+  a subscript, or a name assigned in another function does not. A node
+  function that is returned from a factory and passed around as a variable
+  is not opened. Notebooks are parsed: code cells are one module, and a
+  cell that is not valid Python is skipped.
 - **A trace span whose parent is not in the file** adds no parent/child edge.
   Zipkin still records `remoteEndpoint` when that peer is present.
-- **`from_directory` unions every Compose file it finds.** The same service
-  name in two stacks is one node.
-- **`pyproject.toml` `dynamic = ["dependencies"]`** is not resolved.
+- **Compose service names are bare when they occur in one stack.** A name
+  used by two stacks is `stack/name`, where the stack is the compose
+  project name or the directory.
+- **`pyproject.toml` dynamic fields that are not file references.**
+  `dependencies` and `optional-dependencies` listed in `dynamic` are read
+  from `[tool.setuptools.dynamic]` and
+  `[tool.hatch.metadata.hooks.requirements-txt]` files. A custom Hatch
+  hook is not executed.
 - **Kubernetes names that occur once stay bare.** A name used by more than
-  one object is `Kind/name`, so `Service/frontend -> Deployment/frontend`
+  one object is `Kind/name`, so `Service/billing -> Deployment/billing`
   is kept.
 
 ## Measured on public repos
 
-2026-11-04. Pins and labels are in [`corpus/manifest.json`](corpus/manifest.json)
+2026-11-05. Pins and labels are in [`corpus/manifest.json`](corpus/manifest.json)
 and [`corpus/labels`](corpus/labels). Tuning is 19 labeled files, precision 1
-and recall 1. Held-out files below are also precision 1 and recall 1.
+and recall 1. Held-out is 24 labeled files, 380 edges, micro precision 1.00
+and micro recall 1.00 (every file is also 1.00 / 1.00).
 Every successful parse was run twice and the edge lists matched.
 
 | Source | Held-out check |
 |---|---|
-| Docker Compose | example-voting-app `63e9150c` (5 edges) |
+| Docker Compose | example-voting-app `63e9150c` (5 edges); OpenTelemetry demo `compose.yaml` `0aeadb11` (46 edges) |
 | Kubernetes | guestbook `209452cc` (3 `Kind/name` edges); podinfo kustomize `fd3a834e` |
-| Terraform | s3 `examples/object` `3bdca54e` (11 module edges); dynamodb-table `examples/basic` `b6cc5157` |
+| Terraform | s3 `examples/object` `3bdca54e` (11 module edges); dynamodb-table `examples/basic` `b6cc5157`; eventbridge module `e29707a5` (50 edges, six `.tf` files, including `local` references) |
 | CloudFormation | `LambdaSample.yaml` `6de5bfef` |
 | AWS CDK | `backend/component.py` `f78bdc2e` |
 | Pulumi | `aws-py-s3-folder` `b2a63a2a` (4 edges, including a loop-variable object) |
 | GitHub Actions | click `tests.yaml` `60b9c0e8` |
 | package.json | lerna `9205c2b7` |
-| pyproject.toml | click `60b9c0e8`, httpx `6c7af967` |
+| pyproject.toml | click `60b9c0e8`, httpx `6c7af967`; gradio `ebccfcf3` (31 edges from dynamic requirement files) |
 | requirements.txt | httpx `6c7af967` |
 | Python imports | click `src` `60b9c0e8` (58 edges) |
-| LangGraph | executive-ai-assistant `fb2d1255` (24 edges); react-agent `9e516c6d` (4 edges) |
+| LangGraph | executive-ai-assistant `fb2d1255` (24 edges); react-agent `9e516c6d` (4 edges); langgraph notebooks `23961cff` hierarchical teams (10 edges) and multi-agent collaboration (5 edges) |
 | CrewAI | marketing_strategy `7fba976d` |
 | Zipkin | `zipkin2-client.json` `a36e0577` (`frontend -> backend` via `remoteEndpoint`) |
 
@@ -188,10 +199,11 @@ HEAD versus those pins, same day: Flask pyproject 27 → 25, changesets
 `package.json` 28 → 23, click imports 58 → 61 and pyproject 16 → 17, lerna
 `package.json` 66 → 37 and workspace edges 2 → 1, s3 `examples/object`
 11 → 6. `kubernetes/examples` `guestbook/`, open_deep_research `graph.py`,
-and the crew files under `stock_analysis/` and `marketing_strategy/` are
-not at those paths on HEAD, so those counts go to 0. AutoGen, voting-app,
-the CDK structure repo, podinfo, dynamodb-table, and react-agent were
-already HEAD (delta 0).
+the crew files under `stock_analysis/` and `marketing_strategy/`, and the
+two langgraph notebooks are not at those paths on HEAD, so those counts
+go to 0. AutoGen, voting-app, the CDK structure repo, podinfo,
+dynamodb-table, react-agent, eventbridge, gradio, and the OpenTelemetry
+demo were already HEAD (delta 0).
 
 ```bash
 python corpus/score.py --clone --split tuning
